@@ -3,6 +3,7 @@ package br.com.ne3d.spbshellmodern.shell3d
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselPhysics
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselMotionSpec
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselLayout
+import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselMotionState
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -10,13 +11,16 @@ class CarouselPhysicsTest {
     @Test fun dragChangesAngleAndRestSettlesToPanel() {
         val spec = CarouselMotionSpec()
         val physics = CarouselPhysics(spec)
+        physics.beginDrag()
         physics.dragBy(100f)
+        physics.endDrag()
         assertEquals(100f * spec.dragToAngleRatio, physics.angle, .01f)
         repeat(300) { physics.tick(.016f, 3) }
         assertEquals(0f, physics.angle, .1f)
     }
     @Test fun flingIsBounded() {
         val physics = CarouselPhysics(CarouselMotionSpec(maximumFlingVelocity = 120f))
+        physics.beginDrag()
         physics.fling(100_000f)
         physics.tick(.1f, 3)
         assertTrue(kotlin.math.abs(physics.angle) <= 12.1f)
@@ -51,5 +55,29 @@ class CarouselPhysicsTest {
         assertTrue(kotlin.math.abs(physics.angle) <= 720f)
         physics.dragBy(120f)
         assertTrue(physics.angle.isFinite())
+    }
+    @Test fun stateMachineCoversDragFlingSnapAndExactIdle() {
+        val physics = CarouselPhysics(CarouselMotionSpec())
+        assertEquals(CarouselMotionState.IDLE, physics.state)
+        physics.beginDrag(); assertEquals(CarouselMotionState.DRAG, physics.state)
+        physics.dragBy(70f); physics.endDrag(); assertEquals(CarouselMotionState.SNAP, physics.state)
+        repeat(100) { physics.tick(.016f, 6) }
+        assertEquals(CarouselMotionState.IDLE, physics.state)
+        assertEquals(0f, physics.angle % 60f, .0001f)
+    }
+    @Test fun flingDeceleratesAndRefreshRateProducesEquivalentResult() {
+        fun simulate(dt: Float, steps: Int): CarouselPhysics {
+            val p = CarouselPhysics(CarouselMotionSpec()); p.beginDrag(); p.fling(1200f)
+            val initial = p.velocity; p.tick(dt, 6); assertTrue(kotlin.math.abs(p.velocity) < kotlin.math.abs(initial))
+            repeat(steps - 1) { p.tick(dt, 6) }; return p
+        }
+        val at60 = simulate(1f / 60f, 60)
+        val at120 = simulate(1f / 120f, 120)
+        assertEquals(at60.angle, at120.angle, 1.5f)
+    }
+    @Test fun snapCanBeInterruptedAndReverseDragIsImmediate() {
+        val p = CarouselPhysics(CarouselMotionSpec()); p.beginDrag(); p.dragBy(50f); p.endDrag(); p.tick(.02f, 6)
+        val duringSnap = p.angle; p.beginDrag(); assertEquals(CarouselMotionState.DRAG, p.state); assertEquals(duringSnap, p.angle, 0f)
+        p.dragBy(10f); p.dragBy(-20f); assertTrue(p.angle < duringSnap)
     }
 }

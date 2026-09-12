@@ -92,9 +92,12 @@ class ShellEngine(
     private fun drainCommands() {
         while (true) {
             val command = commands.poll() ?: break
-            consumePendingMoves()
             when (command) {
             Command.GestureStart -> { autoRotationRequested = false; autoWakePending = false; carousel.beginDrag(); idle.onInteraction() }
+            else -> consumePendingMoves()
+            }
+            when (command) {
+            Command.GestureStart -> Unit
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
             is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
             is Command.Exit -> applyExit(command.tapX, command.width)

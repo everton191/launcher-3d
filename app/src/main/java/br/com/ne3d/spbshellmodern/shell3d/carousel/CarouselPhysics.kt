@@ -1,43 +1,96 @@
 package br.com.ne3d.spbshellmodern.shell3d.carousel
 
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.round
+
+/** Mutually-exclusive physical state, owned by ShellEngine's GL thread. */
+enum class CarouselMotionState { IDLE, DRAG, FLING, SNAP, AUTO_ROTATE }
+
+private class CarouselSnapTrack {
+    private var start = 0f
+    private var target = 0f
+    private var elapsed = 0f
+    private var duration = 0f
+    var active = false
+        private set
+
+    fun begin(from: Float, to: Float, durationMillis: Long) {
+        start = from; target = to; elapsed = 0f; duration = durationMillis / 1_000f; active = true
+    }
+    fun tick(dt: Float, easing: (Float) -> Float): Float {
+        elapsed = (elapsed + dt).coerceAtMost(duration)
+        val fraction = if (duration == 0f) 1f else elapsed / duration
+        val result = start + (target - start) * easing(fraction)
+        if (fraction >= 1f) active = false
+        return result
+    }
+    fun target(): Float = target
+    fun cancel() { active = false }
+}
 
 class CarouselPhysics(private val spec: CarouselMotionSpec) {
-    // ShellEngine serializes every mutation on the GL thread.
     var angle = 0f; private set
-    private var velocity = 0f
-    var dragging = false; private set
-    private var autoRotating = false
-    fun beginDrag() { dragging = true; autoRotating = false; velocity = 0f }
-    fun endDrag() { dragging = false }
-    fun autoRotate(degrees: Float) { if (!dragging) { autoRotating = true; angle = normalized(angle - degrees); velocity = 0f } }
-    fun dragBy(pixels: Float) { angle = normalized(angle + pixels * spec.dragToAngleRatio); velocity = 0f }
-    fun fling(pixelsPerSecond: Float) {
-        velocity = (pixelsPerSecond * spec.dragToAngleRatio).coerceIn(-spec.maximumFlingVelocity, spec.maximumFlingVelocity)
-        if (abs(velocity) < spec.minimumFlingVelocity * spec.dragToAngleRatio) velocity = 0f
-    }
-    fun tick(dtSeconds: Float, panelCount: Int): Boolean {
-        if (panelCount <= 0) return false
-        // Never fight the finger: snapping is strictly a release behavior.
-        if (dragging) return false
-        // The idle orbit is deliberately constant; snapping resumes only after touch.
-        if (autoRotating) return false
-        if (abs(velocity) > spec.settleThreshold) {
-            angle = normalized(angle + velocity * dtSeconds)
-            velocity *= exp(-spec.friction * dtSeconds)
-            return true
+    var velocity = 0f; private set // degrees per second: input pixels/s × dragToAngleRatio.
+    var state = CarouselMotionState.IDLE; private set
+    val dragging: Boolean get() = state == CarouselMotionState.DRAG
+    private val snap = CarouselSnapTrack()
+
+    fun beginDrag() { snap.cancel(); velocity = 0f; state = CarouselMotionState.DRAG }
+    fun endDrag() { if (state == CarouselMotionState.DRAG) state = CarouselMotionState.SNAP }
+    fun autoRotate(degrees: Float) {
+        if (state != CarouselMotionState.DRAG) {
+            snap.cancel(); velocity = 0f; state = CarouselMotionState.AUTO_ROTATE; angle = normalized(angle - degrees)
         }
+    }
+    fun dragBy(pixels: Float) { if (state == CarouselMotionState.DRAG) angle = normalized(angle + pixels * spec.dragToAngleRatio) }
+    fun fling(pixelsPerSecond: Float) {
+        if (state != CarouselMotionState.DRAG && state != CarouselMotionState.SNAP) return
+        val degreesPerSecond = pixelsPerSecond * spec.dragToAngleRatio
+        velocity = degreesPerSecond.coerceIn(-spec.maximumFlingVelocity, spec.maximumFlingVelocity)
+        state = if (abs(velocity) >= spec.minimumFlingVelocity * spec.dragToAngleRatio) CarouselMotionState.FLING else CarouselMotionState.SNAP
+    }
+
+    fun tick(dtSeconds: Float, panelCount: Int): Boolean {
+        if (panelCount <= 0) { state = CarouselMotionState.IDLE; return false }
+        when (state) {
+            CarouselMotionState.IDLE, CarouselMotionState.AUTO_ROTATE -> return false
+            CarouselMotionState.DRAG -> return true
+            CarouselMotionState.FLING -> {
+                angle = normalized(angle + velocity * dtSeconds)
+                velocity *= exp(-spec.friction * dtSeconds)
+                if (abs(velocity) <= spec.snapVelocityThreshold) beginSnap(panelCount)
+                return true
+            }
+            CarouselMotionState.SNAP -> {
+                if (!snap.active) beginSnap(panelCount)
+                angle = snap.tick(dtSeconds, ::cubicBezierEase)
+                if (!snap.active) { angle = normalized(snap.target()); velocity = 0f; state = CarouselMotionState.IDLE; return false }
+                return true
+            }
+        }
+    }
+    fun setAngle(value: Float) { snap.cancel(); angle = normalized(value); velocity = 0f; state = CarouselMotionState.IDLE }
+
+    private fun beginSnap(panelCount: Int) {
         val step = 360f / panelCount
-        val target = round(angle / step) * step
-        val error = target - angle
-        if (abs(error) <= spec.settleThreshold) { angle = target; return false }
-        angle = normalized(angle + error * min(1f, dtSeconds * 1000f / spec.snapDurationMs))
-        return true
+        val nearest = round(angle / step) * step
+        val distance = abs(nearest - angle)
+        val duration = (spec.snapMinDurationMs + ((spec.snapMaxDurationMs - spec.snapMinDurationMs) * (distance / step).coerceIn(0f, 1f))).toLong()
+        snap.begin(angle, nearest, duration)
+        velocity = 0f; state = CarouselMotionState.SNAP
     }
-    fun setAngle(value: Float) { angle = normalized(value); velocity = 0f }
-    private fun normalized(value: Float): Float = when {
-        !value.isFinite() -> 0f
-        value > 720f || value < -720f -> value % 360f
-        else -> value
+    /** CSS cubic-bezier domain solve: x is time, y is progress. No temporary allocations. */
+    private fun cubicBezierEase(progress: Float): Float {
+        var t = progress.coerceIn(0f, 1f)
+        repeat(5) {
+            val x = bezier(t, 0f, spec.snapBezierX1, spec.snapBezierX2, 1f) - progress
+            val slope = bezierDerivative(t, 0f, spec.snapBezierX1, spec.snapBezierX2, 1f)
+            if (abs(slope) > .0001f) t = (t - x / slope).coerceIn(0f, 1f)
+        }
+        return bezier(t, 0f, spec.snapBezierY1, spec.snapBezierY2, 1f)
     }
+    private fun bezier(t: Float, p0: Float, p1: Float, p2: Float, p3: Float): Float { val u = 1f - t; return u*u*u*p0 + 3f*u*u*t*p1 + 3f*u*t*t*p2 + t*t*t*p3 }
+    private fun bezierDerivative(t: Float, p0: Float, p1: Float, p2: Float, p3: Float): Float { val u = 1f - t; return 3f*u*u*(p1-p0) + 6f*u*t*(p2-p1) + 3f*t*t*(p3-p2) }
+    private fun normalized(value: Float): Float = when { !value.isFinite() -> 0f; value > 720f || value < -720f -> value % 360f; else -> value }
 }

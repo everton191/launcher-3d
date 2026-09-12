@@ -15,8 +15,11 @@ data class CarouselMotionSpec(
     // barely advancing the ring.
     val dragToAngleRatio: Float = .30f, val minimumFlingVelocity: Float = 240f,
     val maximumFlingVelocity: Float = 2_150f, val friction: Float = 4.35f,
-    val snapThreshold: Float = 2.8f, val snapDurationMs: Long = 300,
+    val snapVelocityThreshold: Float = 18f, val snapMinDurationMs: Long = 160, val snapMaxDurationMs: Long = 320,
+    val snapBezierX1: Float = .25f, val snapBezierY1: Float = 1f, val snapBezierX2: Float = .5f, val snapBezierY2: Float = 1f,
     val entryDurationMs: Long = 430, val exitDurationMs: Long = 340,
     val entryRadiusDelayMs: Long = 70, val entrySpreadDelayMs: Long = 105, val entrySideAlphaDelayMs: Long = 125,
     val overshoot: Float = .04f, val settleThreshold: Float = .05f
 )
+
+
