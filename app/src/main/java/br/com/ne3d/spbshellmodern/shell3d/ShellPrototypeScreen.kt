@@ -179,9 +179,10 @@ private class ShellPrototypeView(
         scheduler.invalidateOnce()
     }
     fun onTextureAvailable() { scheduler.activate(FrameReason.TEXTURE_UPLOAD); scheduler.invalidateOnce() }
-    fun pauseRenderer() { scheduler.shutdown(); super.onPause() }
+    fun pauseRenderer() { scheduler.pause(); super.onPause() }
     fun resumeRenderer() {
         super.onResume()
+        scheduler.resume()
         if (engine.entry.active || engine.exit.active) scheduler.activate(FrameReason.TRANSITION) else scheduler.invalidateOnce()
     }
     fun stopRenderer() { scheduler.shutdown(); queueEvent { renderer.release() } }

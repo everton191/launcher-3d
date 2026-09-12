@@ -43,31 +43,34 @@ class FrameScheduler(
     private var renderPending = false
     private var oneShotRequested = false
     private var delayedWake: (() -> Unit)? = null
+    private var paused = false
     private var stopped = false
     private val frameCallback: () -> Unit = {
         framePosted = false
-        if (!stopped && !renderPending && (oneShotRequested || reasons.any())) {
+        if (!paused && !stopped && !renderPending && (oneShotRequested || reasons.any())) {
             oneShotRequested = false; renderPending = true; requestRender()
         }
-        if (!stopped && reasons.any()) postFrame()
+        if (!paused && !stopped && reasons.any()) postFrame()
     }
 
-    fun activate(reason: FrameReason) { if (!stopped) { reasons.activate(reason); postFrame() } }
+    fun activate(reason: FrameReason) { if (!paused && !stopped) { reasons.activate(reason); postFrame() } }
     fun deactivate(reason: FrameReason) { reasons.deactivate(reason) }
-    fun invalidateOnce() { if (!stopped) { oneShotRequested = true; postFrame() } }
-    fun onRenderConsumed() { renderPending = false; if (!stopped && (oneShotRequested || reasons.any())) postFrame() }
+    fun invalidateOnce() { if (!paused && !stopped) { oneShotRequested = true; postFrame() } }
+    fun onRenderConsumed() { renderPending = false; if (!paused && !stopped && (oneShotRequested || reasons.any())) postFrame() }
     fun has(reason: FrameReason): Boolean = reasons.contains(reason)
     fun cancelDelayedWake() { delayedWake?.let(clock::remove); delayedWake = null }
     fun wakeOnceAfter(delayMillis: Long, action: () -> Unit) {
-        if (stopped) return
+        if (paused || stopped) return
         cancelDelayedWake()
-        val callback: () -> Unit = { delayedWake = null; if (!stopped) action() }
+        val callback: () -> Unit = { delayedWake = null; if (!paused && !stopped) action() }
         delayedWake = callback
         clock.postFrameDelayed(delayMillis, callback)
     }
-    fun shutdown() {
-        stopped = true; framePosted = false; clock.remove(frameCallback); cancelDelayedWake()
+    fun pause() {
+        paused = true; framePosted = false; clock.remove(frameCallback); cancelDelayedWake()
         reasons.clear(); oneShotRequested = false; renderPending = false
     }
+    fun resume() { if (!stopped) paused = false }
+    fun shutdown() { pause(); stopped = true }
     private fun postFrame() { if (!framePosted) { framePosted = true; clock.postFrame(frameCallback) } }
 }

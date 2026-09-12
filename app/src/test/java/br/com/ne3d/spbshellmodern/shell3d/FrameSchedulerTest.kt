@@ -21,6 +21,28 @@ class FrameSchedulerTest {
         scheduler.wakeOnceAfter(5) { woke++ }; scheduler.cancelDelayedWake(); clock.runDelayed(); assertEquals(0, woke)
         scheduler.shutdown(); scheduler.invalidateOnce(); clock.runFrame(); assertEquals(3, renders)
     }
+    @Test fun `pause is reversible but does not restore prior reasons`() {
+        val clock = FakeClock(); var renders = 0; val scheduler = FrameScheduler(clock) { renders++ }
+        scheduler.activate(FrameReason.PHYSICS); clock.runFrame(); assertEquals(1, renders)
+        scheduler.pause(); scheduler.resume(); clock.runFrame(); assertEquals(1, renders)
+        scheduler.invalidateOnce(); clock.runFrame(); assertEquals(2, renders)
+    }
+    @Test fun `pause blocks new frames and cancels delayed wake`() {
+        val clock = FakeClock(); var renders = 0; var wake = 0; val scheduler = FrameScheduler(clock) { renders++ }
+        scheduler.wakeOnceAfter(10) { wake++ }; scheduler.pause()
+        scheduler.activate(FrameReason.PHYSICS); scheduler.invalidateOnce(); clock.runFrame(); clock.runDelayed()
+        assertEquals(0, renders); assertEquals(0, wake)
+    }
+    @Test fun `shutdown remains terminal after resume`() {
+        val clock = FakeClock(); var renders = 0; val scheduler = FrameScheduler(clock) { renders++ }
+        scheduler.shutdown(); scheduler.resume(); scheduler.activate(FrameReason.PHYSICS); scheduler.invalidateOnce(); clock.runFrame()
+        assertEquals(0, renders)
+    }
+    @Test fun `pause while render pending does not schedule another frame`() {
+        val clock = FakeClock(); var renders = 0; val scheduler = FrameScheduler(clock) { renders++ }
+        scheduler.activate(FrameReason.PHYSICS); clock.runFrame(); scheduler.pause(); scheduler.onRenderConsumed(); clock.runFrame()
+        assertEquals(1, renders)
+    }
     private class FakeClock : FrameClock {
         private val frames = ArrayDeque<() -> Unit>(); private val delayed = ArrayDeque<() -> Unit>()
         override fun postFrame(callback: () -> Unit) { frames.addLast(callback) }
