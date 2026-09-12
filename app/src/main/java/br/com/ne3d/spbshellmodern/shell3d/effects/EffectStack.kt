@@ -4,7 +4,7 @@ import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselMotionSpec
 import br.com.ne3d.spbshellmodern.shell3d.scene.Panel3D
 import br.com.ne3d.spbshellmodern.shell3d.scene.Transform3D
 
-class EffectInput { var panelIndex = 0; var selectedIndex = 0; var angle = 0f; var velocity = 0f }
+class EffectInput { var panelIndex = 0; var selectedIndex = 0; var angle = 0f; var velocity = 0f; var progress = 0f; var direction = 1f; var phase = EffectPhase.NONE }
 class EffectContext(val panelCount: Int, val motionSpec: CarouselMotionSpec? = null)
 interface PanelEffector { fun prepare(context: EffectContext) {} ; fun apply(panel: Panel3D, input: EffectInput, output: Transform3D); fun release() {} }
 class EffectStack {
@@ -21,3 +21,4 @@ class EffectStack {
     fun apply(panel: Panel3D, input: EffectInput) { panel.renderTransform.setFrom(panel.baseTransform); var i=0; while(i<effectors.size){ effectors[i].apply(panel,input,panel.renderTransform); i++ } }
 }
 class SpbPrismEffector : PanelEffector { override fun apply(panel: Panel3D, input: EffectInput, output: Transform3D) = Unit }
+
