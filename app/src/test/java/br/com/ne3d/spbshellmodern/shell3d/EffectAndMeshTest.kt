@@ -7,6 +7,7 @@ import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.scene.MeshFactory
 import br.com.ne3d.spbshellmodern.shell3d.scene.Panel3D
 import br.com.ne3d.spbshellmodern.shell3d.scene.Transform3D
+import br.com.ne3d.spbshellmodern.shell3d.core.ShellEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,5 +50,19 @@ class EffectAndMeshTest {
         org.junit.Assert.assertSame(a.mesh, b.mesh)
         b.mesh = MeshFactory.segmentedPlane(2, 2)
         assertTrue(a.mesh !== b.mesh)
+    }
+    @Test fun `engine prepares real context and releases effects once`() {
+        var prepares = 0; var releases = 0; var context: EffectContext? = null
+        val effect = object : PanelEffector {
+            override fun prepare(value: EffectContext) { prepares++; context = value }
+            override fun apply(panel: Panel3D, input: EffectInput, output: Transform3D) = Unit
+            override fun release() { releases++ }
+        }
+        val first = Panel3D("home", "Home", 0).also { it.effectStack.add(effect) }
+        val second = Panel3D("apps", "Apps", 0)
+        val engine = ShellEngine(panels = listOf(first, second))
+        assertEquals(1, prepares); assertEquals(2, context!!.panelCount); org.junit.Assert.assertSame(engine.spec, context!!.motionSpec)
+        repeat(100) { first.effectStack.apply(first, EffectInput()) }; assertEquals(1, prepares)
+        engine.releaseEffects(); engine.releaseEffects(); assertEquals(1, releases); assertTrue(first.effectStack.isEmpty())
     }
 }

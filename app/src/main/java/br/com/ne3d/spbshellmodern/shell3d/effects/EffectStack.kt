@@ -16,6 +16,8 @@ class EffectStack {
     fun add(effector: PanelEffector) { effectors.add(effector); context?.let(effector::prepare) }
     fun remove(effector: PanelEffector): Boolean { val removed=effectors.remove(effector); if(removed) effector.release(); return removed }
     fun clear() { var i=0; while(i<effectors.size){ effectors[i].release(); i++ }; effectors.clear() }
+    /** Terminal release: clear effectors and discard the scene-specific context. */
+    fun release() { clear(); context = null }
     fun apply(panel: Panel3D, input: EffectInput) { panel.renderTransform.setFrom(panel.baseTransform); var i=0; while(i<effectors.size){ effectors[i].apply(panel,input,panel.renderTransform); i++ } }
 }
 class SpbPrismEffector : PanelEffector { override fun apply(panel: Panel3D, input: EffectInput, output: Transform3D) = Unit }

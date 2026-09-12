@@ -5,6 +5,7 @@ import br.com.ne3d.spbshellmodern.shell3d.scene.Panel3D
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselEntryTransition
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselExitTransition
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
+import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -27,6 +28,7 @@ class ShellEngine(
     private var autoRotationRequested = false
     private var autoWakePending = false
     private val commands = ConcurrentLinkedQueue<Command>()
+    private val effectContext: EffectContext
     private val pendingDxBits = AtomicInteger(0)
     private val pendingDyBits = AtomicInteger(0)
     init {
@@ -42,6 +44,9 @@ class ShellEngine(
             Panel3D("gallery", "Galeria", 0xFF705747.toInt(), snapshotKind),
         )
         if (state.panels.isNotEmpty()) carousel.setAngle(-initialSelectedIndex.coerceIn(state.panels.indices) * 360f / state.panels.size)
+        effectContext = EffectContext(panelCount = state.panels.size, motionSpec = spec)
+        var index = 0
+        while (index < state.panels.size) { state.panels[index].effectStack.prepare(effectContext); index++ }
     }
     /** Main/UI thread entry points only enqueue; the GL thread owns all physics mutation. */
     fun onDrag(dx: Float) = accumulate(pendingDxBits, dx)
@@ -88,6 +93,8 @@ class ShellEngine(
     }
     fun consumeExitCompleted() = exit.consumeCompleted()
     fun consumeAutoWakePending(): Boolean = autoWakePending.also { autoWakePending = false }
+    /** GL-owner terminal cleanup; safe to call more than once. */
+    fun releaseEffects() { var index = 0; while (index < state.panels.size) { state.panels[index].effectStack.release(); index++ } }
 
     private fun drainCommands() {
         while (true) {

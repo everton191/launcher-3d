@@ -132,7 +132,7 @@ class ShellRenderer(
     }
     fun beginMeasurement() = metrics.reset()
     fun publishMeasurement(label: String) = metrics.publish(label)
-    fun release() { for (pending in pendingTextures) pending.bitmap.getAndSet(null)?.recycle(); textures.destroy() }
+    fun release() { engine.releaseEffects(); for (pending in pendingTextures) pending.bitmap.getAndSet(null)?.recycle(); textures.destroy() }
     private fun program(): Int {
         fun shader(type: Int, source: String): Int {
             return GLES30.glCreateShader(type).also { handle ->
