@@ -2,6 +2,8 @@ package br.com.ne3d.spbshellmodern.shell3d.carousel
 
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.round
 
 /** Mutually-exclusive physical state, owned by ShellEngine's GL thread. */
@@ -35,6 +37,7 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
     var state = CarouselMotionState.IDLE; private set
     val dragging: Boolean get() = state == CarouselMotionState.DRAG
     private val snap = CarouselSnapTrack()
+    private var flingDirection = 0f
 
     fun beginDrag() { snap.cancel(); velocity = 0f; state = CarouselMotionState.DRAG }
     fun endDrag() { if (state == CarouselMotionState.DRAG) state = CarouselMotionState.SNAP }
@@ -75,9 +78,12 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
     private fun beginSnap(panelCount: Int) {
         val step = 360f / panelCount
         val nearest = round(angle / step) * step
-        val distance = abs(nearest - angle)
+        val target = if (flingDirection != 0f && abs(nearest - angle) > step * .08f && kotlin.math.sign(nearest - angle) != flingDirection) {
+            if (flingDirection > 0f) ceil(angle / step) * step else floor(angle / step) * step
+        } else nearest
+        val distance = abs(target - angle)
         val duration = (spec.snapMinDurationMs + ((spec.snapMaxDurationMs - spec.snapMinDurationMs) * (distance / step).coerceIn(0f, 1f))).toLong()
-        snap.begin(angle, nearest, duration)
+        snap.begin(angle, target, duration)
         velocity = 0f; state = CarouselMotionState.SNAP
     }
     /** CSS cubic-bezier domain solve: x is time, y is progress. No temporary allocations. */
@@ -94,3 +100,5 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
     private fun bezierDerivative(t: Float, p0: Float, p1: Float, p2: Float, p3: Float): Float { val u = 1f - t; return 3f*u*u*(p1-p0) + 6f*u*t*(p2-p1) + 3f*t*t*(p3-p2) }
     private fun normalized(value: Float): Float = when { !value.isFinite() -> 0f; value > 720f || value < -720f -> value % 360f; else -> value }
 }
+
+
