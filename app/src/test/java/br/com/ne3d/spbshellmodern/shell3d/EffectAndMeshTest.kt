@@ -3,6 +3,7 @@ package br.com.ne3d.spbshellmodern.shell3d
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectInput
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectStack
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffector
+import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.scene.MeshFactory
 import br.com.ne3d.spbshellmodern.shell3d.scene.Panel3D
 import br.com.ne3d.spbshellmodern.shell3d.scene.Transform3D
@@ -18,9 +19,9 @@ class EffectAndMeshTest {
     }
     @Test fun `effect order is deterministic`() {
         val p = Panel3D("p", "P", 0); p.baseTransform.x = 1f
-        val add = PanelEffector { _, _, out -> out.x += 10f }
-        val multiply = PanelEffector { _, _, out -> out.x *= 2f }
-        EffectStack(listOf(add, multiply)).apply(p, EffectInput())
+        val add = object : PanelEffector { override fun apply(panel: Panel3D, input: EffectInput, out: Transform3D) { out.x += 10f } }
+        val multiply = object : PanelEffector { override fun apply(panel: Panel3D, input: EffectInput, out: Transform3D) { out.x *= 2f } }
+        EffectStack().apply { add(add); add(multiply) }.apply(p, EffectInput())
         assertEquals(22f, p.renderTransform.x, 0f)
     }
     @Test fun `plane and segmented meshes have finite uv geometry`() {
@@ -29,5 +30,24 @@ class EffectAndMeshTest {
             mesh.vertices.duplicate().apply { position(0) }.let { buffer -> while (buffer.hasRemaining()) assertTrue(buffer.get().isFinite()) }
         }
         assertEquals(25, MeshFactory.segmentedPlane(4, 4).vertexCount)
+        assertEquals(24, MeshFactory.segmentedPlane(2, 2).indexCount)
+        assertEquals(96, MeshFactory.segmentedPlane(4, 4).indexCount)
+    }
+    @Test fun `stack supports add remove clear and lifecycle`() {
+        var prepares = 0; var releases = 0
+        val effect = object : PanelEffector {
+            override fun prepare(context: EffectContext) { prepares++ }
+            override fun apply(panel: Panel3D, input: EffectInput, output: Transform3D) = Unit
+            override fun release() { releases++ }
+        }
+        val stack = EffectStack(); stack.prepare(EffectContext(2)); stack.add(effect)
+        assertEquals(1, stack.size); assertEquals(1, prepares); assertTrue(stack.remove(effect)); assertEquals(1, releases)
+        stack.add(effect); stack.clear(); assertTrue(stack.isEmpty()); assertEquals(2, releases)
+    }
+    @Test fun `default panels share plane and may select distinct meshes`() {
+        val a = Panel3D("a", "A", 0); val b = Panel3D("b", "B", 0)
+        org.junit.Assert.assertSame(a.mesh, b.mesh)
+        b.mesh = MeshFactory.segmentedPlane(2, 2)
+        assertTrue(a.mesh !== b.mesh)
     }
 }
