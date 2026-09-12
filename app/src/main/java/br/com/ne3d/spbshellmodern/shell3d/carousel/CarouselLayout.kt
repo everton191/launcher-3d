@@ -14,7 +14,8 @@ class CarouselLayout(private val spec: CarouselMotionSpec) {
 
     /** Radius to the midpoint of each face of a closed regular polygon. */
     fun closedRadius(count: Int): Float {
-        require(count >= 3) { "A carousel needs at least three panels" }
+        if (count <= 1) return 0f
+        if (count == 2) return spec.radius
         return (spec.panelFaceWidth * spec.centerScale + spec.panelGap) / (2f * tan(Math.PI / count).toFloat())
     }
 
@@ -26,6 +27,11 @@ class CarouselLayout(private val spec: CarouselMotionSpec) {
 
     /** Renderer hot path: fills a reusable transform instead of allocating one per panel per frame. */
     fun transformInto(index: Int, count: Int, globalAngle: Float, radius: Float, spread: Float, result: MutablePanelTransform) {
+        if (count <= 1) {
+            result.angle = 0f; result.x = 0f; result.y = 0f; result.z = 0f; result.rotationY = 0f
+            result.scale = spec.centerScale; result.alpha = 1f; result.visible = true; result.quality = PanelRenderQuality.FULL
+            return
+        }
         val step = 360f / count
         val angle = (index * step + globalAngle) * spread
         val radians = Math.toRadians(angle.toDouble())

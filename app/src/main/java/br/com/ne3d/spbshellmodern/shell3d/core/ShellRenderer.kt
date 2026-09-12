@@ -22,12 +22,14 @@ class ShellRenderer(
     private val onEngineIdle: () -> Unit,
     private val onSurfaceReady: () -> Unit,
     private val onExitFinished: () -> Unit,
+    private val onTextureUploadsDrained: () -> Unit,
     private val pendingTextures: Array<PendingTexture>,
 ) : GLSurfaceView.Renderer {
     data class PendingTexture(val key: String, val bitmap: AtomicReference<Bitmap?>)
     private val camera = ShellCamera(engine.spec); private val textures = TextureManager(); private val vp = FloatArray(16); private val model = FloatArray(16); private val mvp = FloatArray(16)
     private val layout = CarouselLayout(engine.spec); private val metrics = FrameMetrics()
     private var program = 0; private var width = 1; private var height = 1; private var lastNanos = 0L
+    private var positionLocation = -1; private var uvLocation = -1; private var matrixLocation = -1; private var textureLocation = -1; private var alphaLocation = -1
     private var panelHalfHeight = engine.spec.panelAspectRatio
     private val panelTransform = MutablePanelTransform()
     // Android bitmaps use a top-left origin while OpenGL texture coordinates start at bottom-left.
@@ -46,7 +48,13 @@ class ShellRenderer(
         GLES30.glClearColor(.008f,.012f,.016f,1f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST); GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA,GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        textures.resetForContext()
         program = program()
+        positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
+        uvLocation = GLES30.glGetAttribLocation(program, "aUv")
+        matrixLocation = GLES30.glGetUniformLocation(program, "uMvp")
+        textureLocation = GLES30.glGetUniformLocation(program, "uTexture")
+        alphaLocation = GLES30.glGetUniformLocation(program, "uAlpha")
         engine.state.panels.forEach { metrics.textureUpload(textures.label(it.id, it.label, it.color).bytes) }
         lastNanos = System.nanoTime()
         onSurfaceReady()
@@ -69,20 +77,23 @@ class ShellRenderer(
         val physicsNanos = Debug.threadCpuTimeNanos() - physicsStart
         lastNanos=now
         val textureStart = Debug.threadCpuTimeNanos()
+        var uploadedTexture = false
         for (pending in pendingTextures) {
             pending.bitmap.getAndSet(null)?.let { bitmap ->
+                uploadedTexture = true
                 metrics.textureUpload(textures.update(pending.key, bitmap).bytes)
                 Log.i("Shell3D.Capture", "${pending.key} bitmap uploaded ${bitmap.width}x${bitmap.height}")
                 bitmap.recycle()
             }
         }
+        if (uploadedTexture && pendingTextures.none { it.bitmap.get() != null }) onTextureUploadsDrained()
         val textureNanos = Debug.threadCpuTimeNanos() - textureStart
         val matrixStart = Debug.threadCpuTimeNanos()
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val exiting = engine.exit.active
         camera.matrix(width, height, vp, if (exiting) engine.exit.fov else engine.entry.fov, if (exiting) engine.exit.cameraZ else engine.entry.cameraZ, if (exiting) engine.exit.cameraY else engine.cameraY)
         val matrixNanos = Debug.threadCpuTimeNanos() - matrixStart
-        GLES30.glUseProgram(program); val position=GLES30.glGetAttribLocation(program,"aPosition"); val uv=GLES30.glGetAttribLocation(program,"aUv"); val matrix=GLES30.glGetUniformLocation(program,"uMvp"); val texture=GLES30.glGetUniformLocation(program,"uTexture"); val alpha=GLES30.glGetUniformLocation(program,"uAlpha")
+        GLES30.glUseProgram(program); val position=positionLocation; val uv=uvLocation; val matrix=matrixLocation; val texture=textureLocation; val alpha=alphaLocation
         vertices.position(0); GLES30.glVertexAttribPointer(position,2,GLES30.GL_FLOAT,false,16,vertices); GLES30.glEnableVertexAttribArray(position); vertices.position(2); GLES30.glVertexAttribPointer(uv,2,GLES30.GL_FLOAT,false,16,vertices); GLES30.glEnableVertexAttribArray(uv)
         var drawn = 0
         var layoutNanos = 0L

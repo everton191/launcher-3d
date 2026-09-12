@@ -8,6 +8,7 @@ import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 class ShellEngine(
     val spec: CarouselMotionSpec = CarouselMotionSpec(),
@@ -26,6 +27,8 @@ class ShellEngine(
     private var autoRotationRequested = false
     private var autoWakePending = false
     private val commands = ConcurrentLinkedQueue<Command>()
+    private val pendingDxBits = AtomicInteger(0)
+    private val pendingDyBits = AtomicInteger(0)
     init {
         val snapshotKind = if (includeRealSnapshots) br.com.ne3d.spbshellmodern.shell3d.scene.PanelTextureKind.REAL_SNAPSHOT else br.com.ne3d.spbshellmodern.shell3d.scene.PanelTextureKind.STATIC
         state.panels += panels ?: listOf(
@@ -41,10 +44,10 @@ class ShellEngine(
         if (state.panels.isNotEmpty()) carousel.setAngle(-initialSelectedIndex.coerceIn(state.panels.indices) * 360f / state.panels.size)
     }
     /** Main/UI thread entry points only enqueue; the GL thread owns all physics mutation. */
-    fun onDrag(dx: Float) = commands.add(Command.Drag(dx))
+    fun onDrag(dx: Float) = accumulate(pendingDxBits, dx)
     fun onGestureStart() = commands.add(Command.GestureStart)
     fun onGestureEnd() = commands.add(Command.GestureEnd)
-    fun onVerticalDrag(dy: Float) = commands.add(Command.VerticalDrag(dy))
+    fun onVerticalDrag(dy: Float) = accumulate(pendingDyBits, dy)
     fun onFling(velocityX: Float) = commands.add(Command.Fling(velocityX))
     fun beginExitAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.Exit(tapX, surfaceWidth))
     fun beginAutoRotation() = commands.add(Command.AutoRotate)
@@ -72,6 +75,7 @@ class ShellEngine(
         val entering = entry.tick(dt)
         if (entering) return true
         if (exit.active) return exit.tick(dt)
+        if (carousel.dragging) return true
         val settling = carousel.tick(dt, state.panels.size)
         if (settling) return true
         if (autoRotationRequested) {
@@ -86,14 +90,31 @@ class ShellEngine(
     fun consumeAutoWakePending(): Boolean = autoWakePending.also { autoWakePending = false }
 
     private fun drainCommands() {
-        while (true) when (val command = commands.poll() ?: break) {
+        while (true) {
+            val command = commands.poll() ?: break
+            consumePendingMoves()
+            when (command) {
             Command.GestureStart -> { autoRotationRequested = false; autoWakePending = false; carousel.beginDrag(); idle.onInteraction() }
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
-            is Command.Drag -> { autoRotationRequested = false; autoWakePending = false; idle.onInteraction(); carousel.dragBy(command.dx) }
-            is Command.VerticalDrag -> { autoRotationRequested = false; autoWakePending = false; idle.onInteraction(); applyVerticalDrag(command.dy) }
             is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
             is Command.Exit -> applyExit(command.tapX, command.width)
             Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
+            }
+        }
+        consumePendingMoves()
+    }
+
+    private fun consumePendingMoves() {
+        val dx = Float.fromBits(pendingDxBits.getAndSet(0))
+        val dy = Float.fromBits(pendingDyBits.getAndSet(0))
+        if (dx != 0f) { autoRotationRequested = false; autoWakePending = false; idle.onInteraction(); carousel.dragBy(dx) }
+        if (dy != 0f) { autoRotationRequested = false; autoWakePending = false; idle.onInteraction(); applyVerticalDrag(dy) }
+    }
+    private fun accumulate(target: AtomicInteger, delta: Float) {
+        while (true) {
+            val before = target.get()
+            val after = Float.fromBits(before) + delta
+            if (target.compareAndSet(before, after.toBits())) return
         }
     }
 
@@ -101,8 +122,6 @@ class ShellEngine(
         data object GestureStart : Command
         data object GestureEnd : Command
         data object AutoRotate : Command
-        data class Drag(val dx: Float) : Command
-        data class VerticalDrag(val dy: Float) : Command
         data class Fling(val velocityX: Float) : Command
         data class Exit(val tapX: Float, val width: Float) : Command
     }

@@ -31,6 +31,17 @@ class CarouselPhysicsTest {
         assertTrue(layout.sizeScale(3) > layout.sizeScale(8))
         assertTrue(layout.sizeScale(8) > layout.sizeScale(16))
     }
+    @Test fun layoutSupportsOneTwoAndRegularPanelCounts() {
+        val layout = CarouselLayout(CarouselMotionSpec())
+        listOf(1, 2, 3, 6).forEach { count ->
+            val transform = layout.transform(0, count, 0f)
+            assertTrue(transform.x.isFinite())
+            assertTrue(transform.z.isFinite())
+            assertTrue(transform.visible)
+        }
+        assertEquals(0f, layout.closedRadius(1), 0f)
+        assertTrue(layout.closedRadius(2) > 0f)
+    }
     @Test fun sustainedManualRotationStaysFiniteAndResponsive() {
         val physics = CarouselPhysics(CarouselMotionSpec())
         physics.beginDrag()

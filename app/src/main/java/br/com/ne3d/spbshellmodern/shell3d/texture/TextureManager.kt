@@ -33,5 +33,7 @@ class TextureManager {
         return Update(texture, bitmap.byteCount)
     }
     fun textureId(key: String): Int = ids[key] ?: 0
+    /** A recreated EGL context invalidates every GL name; logical panel keys remain valid. */
+    fun resetForContext() { ids.clear(); sizes.clear() }
     fun destroy() { ids.values.forEach { GLES30.glDeleteTextures(1, intArrayOf(it), 0) }; ids.clear(); sizes.clear() }
 }
