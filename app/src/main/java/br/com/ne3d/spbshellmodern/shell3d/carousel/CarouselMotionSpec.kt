@@ -17,6 +17,7 @@ data class CarouselMotionSpec(
     val maximumFlingVelocity: Float = 2_150f, val friction: Float = 4.35f,
     val snapVelocityThreshold: Float = 18f, val snapMinDurationMs: Long = 160, val snapMaxDurationMs: Long = 320,
     val snapBezierX1: Float = .25f, val snapBezierY1: Float = 1f, val snapBezierX2: Float = .5f, val snapBezierY2: Float = 1f,
+    val snapDirectionDeadZoneRatio: Float = .08f,
     val entryDurationMs: Long = 430, val exitDurationMs: Long = 340,
     val entryRadiusDelayMs: Long = 70, val entrySpreadDelayMs: Long = 105, val entrySideAlphaDelayMs: Long = 125,
     val overshoot: Float = .04f, val settleThreshold: Float = .05f

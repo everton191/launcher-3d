@@ -80,4 +80,22 @@ class CarouselPhysicsTest {
         val duringSnap = p.angle; p.beginDrag(); assertEquals(CarouselMotionState.DRAG, p.state); assertEquals(duringSnap, p.angle, 0f)
         p.dragBy(10f); p.dragBy(-20f); assertTrue(p.angle < duringSnap)
     }
+    @Test fun positiveFlingKeepsForwardIntentWhenNearestWouldReverse() {
+        val p = CarouselPhysics(CarouselMotionSpec(minimumFlingVelocity = 1f, snapVelocityThreshold = 100f))
+        p.setAngle(29f); p.beginDrag(); p.fling(200f); p.tick(.01f, 6)
+        assertEquals(60f, p.snapTargetAngle!!, .001f)
+    }
+    @Test fun negativeFlingKeepsBackwardIntentWhenNearestWouldReverse() {
+        val p = CarouselPhysics(CarouselMotionSpec(minimumFlingVelocity = 1f, snapVelocityThreshold = 100f))
+        p.setAngle(-29f); p.beginDrag(); p.fling(-200f); p.tick(.01f, 6)
+        assertEquals(-60f, p.snapTargetAngle!!, .001f)
+    }
+    @Test fun weakFlingAndNewDragDoNotKeepOldDirection() {
+        val p = CarouselPhysics(CarouselMotionSpec(minimumFlingVelocity = 240f, snapVelocityThreshold = 100f))
+        p.setAngle(29f); p.beginDrag(); p.fling(1f); p.tick(.01f, 6)
+        assertEquals(0f, p.snapTargetAngle!!, .001f)
+        p.beginDrag(); p.endDrag(); p.tick(.01f, 6)
+        assertEquals(0f, p.snapTargetAngle!!, .001f)
+    }
 }
+

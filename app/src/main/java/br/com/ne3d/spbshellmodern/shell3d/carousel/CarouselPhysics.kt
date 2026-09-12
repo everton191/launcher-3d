@@ -38,12 +38,14 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
     val dragging: Boolean get() = state == CarouselMotionState.DRAG
     private val snap = CarouselSnapTrack()
     private var flingDirection = 0f
+    private val snapEasing: (Float) -> Float = { cubicBezierEase(it) }
+    internal val snapTargetAngle: Float? get() = if (snap.active) snap.target() else null
 
-    fun beginDrag() { snap.cancel(); velocity = 0f; state = CarouselMotionState.DRAG }
+    fun beginDrag() { snap.cancel(); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.DRAG }
     fun endDrag() { if (state == CarouselMotionState.DRAG) state = CarouselMotionState.SNAP }
     fun autoRotate(degrees: Float) {
         if (state != CarouselMotionState.DRAG) {
-            snap.cancel(); velocity = 0f; state = CarouselMotionState.AUTO_ROTATE; angle = normalized(angle - degrees)
+            snap.cancel(); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.AUTO_ROTATE; angle = normalized(angle - degrees)
         }
     }
     fun dragBy(pixels: Float) { if (state == CarouselMotionState.DRAG) angle = normalized(angle + pixels * spec.dragToAngleRatio) }
@@ -51,7 +53,13 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
         if (state != CarouselMotionState.DRAG && state != CarouselMotionState.SNAP) return
         val degreesPerSecond = pixelsPerSecond * spec.dragToAngleRatio
         velocity = degreesPerSecond.coerceIn(-spec.maximumFlingVelocity, spec.maximumFlingVelocity)
-        state = if (abs(velocity) >= spec.minimumFlingVelocity * spec.dragToAngleRatio) CarouselMotionState.FLING else CarouselMotionState.SNAP
+        state = if (abs(velocity) >= spec.minimumFlingVelocity * spec.dragToAngleRatio) {
+            flingDirection = kotlin.math.sign(velocity)
+            CarouselMotionState.FLING
+        } else {
+            flingDirection = 0f
+            CarouselMotionState.SNAP
+        }
     }
 
     fun tick(dtSeconds: Float, panelCount: Int): Boolean {
@@ -67,18 +75,18 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
             }
             CarouselMotionState.SNAP -> {
                 if (!snap.active) beginSnap(panelCount)
-                angle = snap.tick(dtSeconds, ::cubicBezierEase)
-                if (!snap.active) { angle = normalized(snap.target()); velocity = 0f; state = CarouselMotionState.IDLE; return false }
+                angle = snap.tick(dtSeconds, snapEasing)
+                if (!snap.active) { angle = normalized(snap.target()); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.IDLE; return false }
                 return true
             }
         }
     }
-    fun setAngle(value: Float) { snap.cancel(); angle = normalized(value); velocity = 0f; state = CarouselMotionState.IDLE }
+    fun setAngle(value: Float) { snap.cancel(); angle = normalized(value); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.IDLE }
 
     private fun beginSnap(panelCount: Int) {
         val step = 360f / panelCount
         val nearest = round(angle / step) * step
-        val target = if (flingDirection != 0f && abs(nearest - angle) > step * .08f && kotlin.math.sign(nearest - angle) != flingDirection) {
+        val target = if (flingDirection != 0f && abs(nearest - angle) > step * spec.snapDirectionDeadZoneRatio && kotlin.math.sign(nearest - angle) != flingDirection) {
             if (flingDirection > 0f) ceil(angle / step) * step else floor(angle / step) * step
         } else nearest
         val distance = abs(target - angle)
