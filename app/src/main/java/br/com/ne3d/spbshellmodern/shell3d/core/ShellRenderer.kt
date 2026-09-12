@@ -4,6 +4,8 @@ import android.opengl.*
 import br.com.ne3d.spbshellmodern.shell3d.camera.ShellCamera
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselLayout
 import br.com.ne3d.spbshellmodern.shell3d.carousel.MutablePanelTransform
+import br.com.ne3d.spbshellmodern.shell3d.effects.EffectInput
+import br.com.ne3d.spbshellmodern.shell3d.scene.MeshFactory
 import br.com.ne3d.spbshellmodern.shell3d.debug.FrameMetrics
 import br.com.ne3d.spbshellmodern.shell3d.texture.TextureManager
 import android.graphics.Bitmap
@@ -32,18 +34,8 @@ class ShellRenderer(
     private var positionLocation = -1; private var uvLocation = -1; private var matrixLocation = -1; private var textureLocation = -1; private var alphaLocation = -1
     private var panelHalfHeight = engine.spec.panelAspectRatio
     private val panelTransform = MutablePanelTransform()
-    // Android bitmaps use a top-left origin while OpenGL texture coordinates start at bottom-left.
-    private val vertices = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
-    private fun updatePanelVertices() {
-        vertices.clear()
-        vertices.put(floatArrayOf(
-            -1f, -panelHalfHeight, 0f, 1f,
-             1f, -panelHalfHeight, 1f, 1f,
-            -1f,  panelHalfHeight, 0f, 0f,
-             1f,  panelHalfHeight, 1f, 0f,
-        ))
-        vertices.position(0)
-    }
+    private val effectInput = EffectInput()
+    private var panelMesh = MeshFactory.plane(panelHalfHeight)
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES30.glClearColor(.008f,.012f,.016f,1f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST); GLES30.glEnable(GLES30.GL_BLEND)
@@ -63,7 +55,7 @@ class ShellRenderer(
         width = w; height = h
         // Cards are vertical 9:16 faces regardless of the phone viewport.
         panelHalfHeight = engine.spec.panelAspectRatio
-        updatePanelVertices()
+        panelMesh = MeshFactory.plane(panelHalfHeight)
         GLES30.glViewport(0, 0, w, h)
     }
     override fun onDrawFrame(gl: GL10?) {
@@ -94,7 +86,7 @@ class ShellRenderer(
         camera.matrix(width, height, vp, if (exiting) engine.exit.fov else engine.entry.fov, if (exiting) engine.exit.cameraZ else engine.entry.cameraZ, if (exiting) engine.exit.cameraY else engine.cameraY)
         val matrixNanos = Debug.threadCpuTimeNanos() - matrixStart
         GLES30.glUseProgram(program); val position=positionLocation; val uv=uvLocation; val matrix=matrixLocation; val texture=textureLocation; val alpha=alphaLocation
-        vertices.position(0); GLES30.glVertexAttribPointer(position,2,GLES30.GL_FLOAT,false,16,vertices); GLES30.glEnableVertexAttribArray(position); vertices.position(2); GLES30.glVertexAttribPointer(uv,2,GLES30.GL_FLOAT,false,16,vertices); GLES30.glEnableVertexAttribArray(uv)
+        panelMesh.vertices.position(0); GLES30.glVertexAttribPointer(position,2,GLES30.GL_FLOAT,false,panelMesh.strideBytes,panelMesh.vertices); GLES30.glEnableVertexAttribArray(position); panelMesh.vertices.position(2); GLES30.glVertexAttribPointer(uv,2,GLES30.GL_FLOAT,false,panelMesh.strideBytes,panelMesh.vertices); GLES30.glEnableVertexAttribArray(uv)
         var drawn = 0
         var layoutNanos = 0L
         var panelMatrixNanos = 0L
@@ -102,21 +94,36 @@ class ShellRenderer(
         val count=engine.state.panels.size; engine.state.panels.forEachIndexed { index,panel ->
             val layoutStart = Debug.threadCpuTimeNanos()
             layout.transformInto(index, count, engine.carousel.angle, if (exiting) engine.exit.radius else engine.entry.radius, if (exiting) engine.exit.panelSpread else engine.entry.panelSpread, panelTransform)
+            panel.baseTransform.x = panelTransform.x
+            panel.baseTransform.y = panelTransform.y
+            panel.baseTransform.z = panelTransform.z
+            panel.baseTransform.rotationY = panelTransform.rotationY
+            panel.baseTransform.scaleX = panelTransform.scale
+            panel.baseTransform.scaleY = panelTransform.scale
+            panel.baseTransform.scaleZ = panelTransform.scale
+            panel.baseTransform.alpha = panelTransform.alpha
+            panel.baseTransform.visible = panelTransform.visible
+            effectInput.panelIndex = index
+            effectInput.selectedIndex = engine.selectedIndex
+            effectInput.angle = panelTransform.angle
+            effectInput.velocity = engine.carousel.velocity
+            panel.effectStack.apply(panel, effectInput)
             layoutNanos += Debug.threadCpuTimeNanos() - layoutStart
-            if (!panelTransform.visible || textures.textureId(panel.id) == 0) return@forEachIndexed
+            val transform = panel.renderTransform
+            if (!transform.visible || textures.textureId(panel.id) == 0) return@forEachIndexed
             val panelMatrixStart = Debug.threadCpuTimeNanos()
-            val exitScale = panelTransform.scale * if (exiting && index == engine.selectedIndex) 1f + engine.exit.progress * .12f else 1f
+            val exitScale = transform.scaleX * if (exiting && index == engine.selectedIndex) 1f + engine.exit.progress * .12f else 1f
             val exitAlpha = if (exiting && index != engine.selectedIndex) 1f - engine.exit.progress else 1f
             val entryAlpha = if (engine.entry.active && index != 0) engine.entry.sideAlpha else 1f
             // A single front reflection keeps the floor effect while avoiding a second
             // draw call for every face on the older device GPU.
             if (index == engine.selectedIndex) {
-                Matrix.setIdentityM(model,0); Matrix.translateM(model,0,panelTransform.x,panelTransform.y - panelHalfHeight * 1.47f * exitScale,panelTransform.z); Matrix.rotateM(model,0,panelTransform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,exitScale,-exitScale,exitScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
-                GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1f(alpha,panelTransform.alpha * exitAlpha * entryAlpha * .16f); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,0,4); drawn++
+                Matrix.setIdentityM(model,0); Matrix.translateM(model,0,transform.x,transform.y - panelHalfHeight * 1.47f * exitScale,transform.z); Matrix.rotateM(model,0,transform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,exitScale,-exitScale,exitScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
+                GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1f(alpha,transform.alpha * exitAlpha * entryAlpha * .16f); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,0,4); drawn++
             }
-            Matrix.setIdentityM(model,0); Matrix.translateM(model,0,panelTransform.x,panelTransform.y,panelTransform.z); Matrix.rotateM(model,0,panelTransform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,exitScale,exitScale,exitScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
+            Matrix.setIdentityM(model,0); Matrix.translateM(model,0,transform.x,transform.y,transform.z); Matrix.rotateM(model,0,transform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,exitScale,exitScale,exitScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
             panelMatrixNanos += Debug.threadCpuTimeNanos() - panelMatrixStart
-            GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1f(alpha,panelTransform.alpha * exitAlpha * entryAlpha); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,0,4); drawn++
+            GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1f(alpha,transform.alpha * exitAlpha * entryAlpha); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,0,4); drawn++
         }; GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val drawNanos = Debug.threadCpuTimeNanos() - drawStart
         metrics.record(now, Debug.threadCpuTimeNanos() - frameCpuStart, animationNanos, physicsNanos, layoutNanos, matrixNanos + panelMatrixNanos, drawNanos, textureNanos, drawn, drawn)
@@ -151,3 +158,5 @@ class ShellRenderer(
         }
     }
 }
+
+
