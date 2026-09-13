@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import br.com.ne3d.spbshellmodern.ui.HomeScreen
 import br.com.ne3d.spbshellmodern.shell3d.ShellPrototypeScreen
 import br.com.ne3d.spbshellmodern.model.initialPanels
+import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectDebug
 
 class MainActivity : ComponentActivity() {
     private var homeRequestId by mutableIntStateOf(0)
@@ -48,8 +49,10 @@ class MainActivity : ComponentActivity() {
     private fun applyLaunchIntent(intent: Intent) {
         shell3dPrototype = intent.getBooleanExtra(EXTRA_SHELL3D_PROTOTYPE, false)
         shell3dRealPanel = intent.getBooleanExtra(EXTRA_SHELL3D_REAL_PANEL, true)
+        if (BuildConfig.DEBUG) PanelEffectDebug.select(intent.getStringExtra(EXTRA_SHELL3D_EFFECT)) else PanelEffectDebug.select(null)
     }
 }
 
 const val EXTRA_SHELL3D_PROTOTYPE = "br.com.ne3d.spbshellmodern.extra.SHELL3D_PROTOTYPE"
 const val EXTRA_SHELL3D_REAL_PANEL = "br.com.ne3d.spbshellmodern.extra.SHELL3D_REAL_PANEL"
+const val EXTRA_SHELL3D_EFFECT = "shell3d_effect"

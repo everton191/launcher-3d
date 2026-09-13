@@ -13,6 +13,9 @@ class Panel3D(val id:String,val label:String,val color:Int,val textureKind:Panel
  var effectMesh: Mesh? = null
  var workingMesh:MutableMesh?=null
  var renderMesh:RenderMesh=baseMesh
+ /** GL-owned state shared by the panel and its mirror during the current frame. */
+ var effectiveScale = 1f
+ var effectiveAlpha = 1f
  private val activeMesh: Mesh get() = effectMesh ?: baseMesh
  fun ensureWorkingMesh(){if(workingMesh?.baseMesh !== activeMesh)workingMesh=MutableMesh(activeMesh)}
  fun resetRenderMesh(){renderMesh=baseMesh; effectMesh=null}

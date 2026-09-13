@@ -6,6 +6,15 @@ import br.com.ne3d.spbshellmodern.shell3d.scene.Panel3D
 /** Internal-only effect selection. The product remains on NONE until a transition owns it. */
 object PanelEffectDebug {
     @Volatile var mode: PanelEffectMode = PanelEffectMode.NONE
+
+    fun select(rawMode: String?) {
+        mode = when (rawMode?.trim()?.uppercase()) {
+            "STACK" -> PanelEffectMode.STACK
+            "FOLD" -> PanelEffectMode.FOLD
+            "ORIGAMI" -> PanelEffectMode.ORIGAMI
+            else -> PanelEffectMode.NONE
+        }
+    }
 }
 
 fun Panel3D.configureEffect(mode: PanelEffectMode, spec: PanelEffectSpec = PanelEffectSpec()) {

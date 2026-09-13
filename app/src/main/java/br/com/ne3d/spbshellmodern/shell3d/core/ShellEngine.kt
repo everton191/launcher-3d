@@ -8,6 +8,7 @@ import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectDebug
 import br.com.ne3d.spbshellmodern.shell3d.effects.configureEffect
+import android.util.Log
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.math.PI
@@ -86,6 +87,7 @@ class ShellEngine(
         if (entry.active || exit.active || state.panels.isEmpty()) return
         selectedIndex = index.coerceIn(state.panels.indices)
         state.panels[selectedIndex].configureEffect(PanelEffectDebug.mode)
+        Log.i("Shell3D.Exit", "target=${state.panels[selectedIndex].id} index=$selectedIndex effect=${PanelEffectDebug.mode}")
         exit.begin()
     }
     fun tick(dt: Float): Boolean {
