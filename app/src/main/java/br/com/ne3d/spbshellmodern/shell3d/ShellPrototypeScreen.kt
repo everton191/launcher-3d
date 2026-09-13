@@ -57,6 +57,8 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.CalendarDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PersonalWidgetRepository
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosTextureStore
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.ContactsDataSource
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
@@ -97,9 +99,11 @@ private class ShellPrototypeContainer(
     private var lastWeatherInfo: WeatherInfo? = weatherInfo
     private val sceneType = requestedWidgetScene ?: if (worldTimeWidgetScene) WidgetSceneType.WORLD_TIME else null
     private val hasRealSnapshots = includeRealPanels && !debugWidgetScene && sceneType == null
+    @Volatile private var photosDetached = false
     private var captureRequested = false
     private val workspacePanels = panels.ifEmpty { listOf(panelTemplate(PanelType.HOME)) }
     private val pendingTextures = workspacePanels.map { ShellRenderer.PendingTexture(it.id, AtomicReference<Bitmap?>(null)) }.toTypedArray()
+    private val photosTextureStore: PhotosTextureStore? = if (sceneType == WidgetSceneType.PHOTOS) PhotosTextureStore() else null
     private val widgetScene: WidgetScene? = if (debugWidgetScene) WidgetSceneRegistry().apply {
         register(WidgetSceneRegistry.DEBUG_SCENE) { DebugWidgetScene() }
     }.create(WidgetSceneRegistry.DEBUG_SCENE) else when (sceneType) {
@@ -107,7 +111,7 @@ private class ShellPrototypeContainer(
         WidgetSceneType.WEATHER -> WidgetSceneRegistry.production().create(WeatherWidgetIds.WEATHER)
         WidgetSceneType.MUSIC -> WidgetSceneRegistry.production().create("music")
         WidgetSceneType.CALENDAR -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CALENDAR)
-        WidgetSceneType.PHOTOS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.PHOTOS)
+        WidgetSceneType.PHOTOS -> PhotosScene(photosTextureStore ?: error("Photos texture store unavailable"))
         WidgetSceneType.CONTACTS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CONTACTS)
         WidgetSceneType.NOTIFICATIONS, WidgetSceneType.SYSTEM -> null
         null -> null
@@ -189,8 +193,11 @@ private class ShellPrototypeContainer(
     private fun refreshPhotos() {
         Thread {
             val (available, photos) = PersonalWidgetRepository(context).photos()
+            if (photosDetached) return@Thread
+            if (available) photosTextureStore?.load(context.contentResolver, photos) { !photosDetached }
+            if (photosDetached) return@Thread
             photosDataSource?.publishPhotos(available, photos)
-            post { surface.onWidgetSnapshotPublished() }
+            post { if (!photosDetached) surface.onWidgetSnapshotPublished() }
         }.start()
     }
     private fun refreshContacts() {
@@ -200,9 +207,15 @@ private class ShellPrototypeContainer(
             post { surface.onWidgetSnapshotPublished() }
         }.start()
     }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        photosDetached = false
+    }
     override fun onDetachedFromWindow() {
+        photosDetached = true
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         lifecycleOwner = null
+        photosTextureStore?.release()
         super.onDetachedFromWindow()
     }
     private fun updateWorldTimeInfo(snapshot: WorldTimeSnapshot?) {

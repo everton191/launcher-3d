@@ -16,5 +16,42 @@ abstract class PersonalScene(private val sceneId:String, private val color:Int):
  override fun tick(dtSeconds:Float)=false;override fun pause()=Unit;override fun resume()=Unit;override fun release(){cards.clear();graph.clear();interactions.clear();prepared=false}
 }
 class CalendarScene:PersonalScene("calendar",0xFF8B78C4.toInt())
-class PhotosScene:PersonalScene("photos",0xFF5BAAA8.toInt())
+
+/** A small gallery of textured planes. Photo pixels remain Android-side until the renderer uploads them. */
+class PhotosScene(private val textures: PhotosTextureStore = PhotosTextureStore()):WidgetScene {
+ override val id = "photos"
+ override val graph = SceneGraph()
+ override val interactions = InteractionMap()
+ private val cards = ArrayList<SceneNode>(6)
+ private var prepared = false
+ override fun prepare(context: WidgetSceneContext) {
+  if (prepared) return
+  prepared = true
+  repeat(6) { index ->
+   cards += graph.root.add(SceneNode("photo-$index").apply {
+    mesh = MeshFactory.plane(.30f)
+    material = WidgetMaterial(color = 0xFFFFFFFF.toInt())
+    local.x = (index % 3 - 1) * .58f
+    local.y = if (index < 3) .25f else -.25f
+    local.z = -index * .07f
+    local.rotationY = (index % 3 - 1) * -8f
+    local.alpha = 0f
+   })
+  }
+  graph.updateWorld()
+ }
+ override fun update(snapshot: WidgetSnapshot) {
+  val photos = (snapshot as? PhotosSnapshot)?.takeIf { it.available }?.photos.orEmpty()
+  cards.forEachIndexed { index, card ->
+   val photo = photos.getOrNull(index)
+   card.local.alpha = if (photo == null) 0f else 1f
+   if (photo != null) card.material = WidgetMaterial(color = 0xFFFFFFFF.toInt(), textureRef = textures.refFor(photo.uri))
+  }
+  graph.updateWorld()
+ }
+ override fun tick(dtSeconds: Float) = false
+ override fun pause() = Unit
+ override fun resume() = Unit
+ override fun release() { cards.clear(); graph.clear(); interactions.clear(); prepared = false; textures.release() }
+}
 class ContactsScene:PersonalScene("contacts",0xFFCD8C5A.toInt())
