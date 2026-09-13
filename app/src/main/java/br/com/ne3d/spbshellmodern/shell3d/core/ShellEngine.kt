@@ -68,7 +68,7 @@ class ShellEngine(
     fun onGestureEnd() = commands.add(Command.GestureEnd)
     fun onVerticalDrag(dy: Float) = accumulate(pendingDyBits, dy)
     fun onFling(velocityX: Float) = commands.add(Command.Fling(velocityX))
-    fun openPanelAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.OpenAt(tapX, surfaceWidth))
+    fun beginExitForPanel(index: Int) = commands.add(Command.ExitPanel(index))
     fun panelIndexAt(tapX: Float, surfaceWidth: Float): Int {
         if (state.panels.isEmpty()) return 0
         val targetX = (tapX / surfaceWidth.coerceAtLeast(1f) - .5f) * 2f
@@ -103,6 +103,11 @@ class ShellEngine(
             else -> 0
         }
         selectedIndex = (centeredIndex + offset).mod(state.panels.size)
+        exit.begin()
+    }
+    private fun applyExitForPanel(index: Int) {
+        if (entry.active || exit.active || state.panels.isEmpty()) return
+        selectedIndex = index.coerceIn(state.panels.indices)
         exit.begin()
     }
     private fun openAt(tapX: Float, surfaceWidth: Float) {
@@ -165,7 +170,7 @@ class ShellEngine(
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
             is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
             is Command.Exit -> applyExit(command.tapX, command.width)
-            is Command.OpenAt -> openAt(command.tapX, command.width)
+            is Command.ExitPanel -> applyExitForPanel(command.index)
             is Command.TransitionOpen -> transition.requestOpen(command.panel, command.mode)
             Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
             }
@@ -193,7 +198,7 @@ class ShellEngine(
         data object AutoRotate : Command
         data class Fling(val velocityX: Float) : Command
         data class Exit(val tapX: Float, val width: Float) : Command
-        data class OpenAt(val tapX: Float, val width: Float) : Command
+        data class ExitPanel(val index: Int) : Command
         data class TransitionOpen(val panel: Int, val mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) : Command
     }
     companion object { const val AUTO_ROTATE_DELAY_MILLIS = 5_000L; private const val AUTO_ROTATE_DEGREES_PER_SECOND = 18f }
