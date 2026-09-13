@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import br.com.ne3d.spbshellmodern.model.PanelType
+import br.com.ne3d.spbshellmodern.model.WeatherInfo
 import br.com.ne3d.spbshellmodern.model.LauncherPanel
 import br.com.ne3d.spbshellmodern.model.panelTemplate
 import br.com.ne3d.spbshellmodern.shell3d.core.ShellEngine
@@ -50,6 +51,8 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeCities
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WidgetIds
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeClockSchedule
+import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetIds
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -60,12 +63,14 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeClockSchedu
     gesturesEnabled: Boolean = true,
     debugWidgetScene: Boolean = false,
     worldTimeWidgetScene: Boolean = false,
+    widgetSceneType: WidgetSceneType? = null,
+    weatherInfo: WeatherInfo? = null,
     onExit: (String) -> Unit = {},
     modifier: Modifier = Modifier,
-) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene) {
+) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, widgetSceneType, weatherInfo) {
     val lifecycleOwner = LocalLifecycleOwner.current
     AndroidView(
-        factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, onExit) },
+        factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, widgetSceneType, weatherInfo, onExit) },
         update = { it.onExit = onExit; it.bindLifecycle(lifecycleOwner) },
         modifier = modifier,
     )
@@ -80,20 +85,28 @@ private class ShellPrototypeContainer(
     gesturesEnabled: Boolean,
     debugWidgetScene: Boolean,
     worldTimeWidgetScene: Boolean,
+    private val requestedWidgetScene: WidgetSceneType?,
+    private val weatherInfo: WeatherInfo?,
     var onExit: (String) -> Unit,
 ) : FrameLayout(context) {
-    private val hasRealSnapshots = includeRealPanels && !debugWidgetScene && !worldTimeWidgetScene
+    private val sceneType = requestedWidgetScene ?: if (worldTimeWidgetScene) WidgetSceneType.WORLD_TIME else null
+    private val hasRealSnapshots = includeRealPanels && !debugWidgetScene && sceneType == null
     private var captureRequested = false
     private val workspacePanels = panels.ifEmpty { listOf(panelTemplate(PanelType.HOME)) }
     private val pendingTextures = workspacePanels.map { ShellRenderer.PendingTexture(it.id, AtomicReference<Bitmap?>(null)) }.toTypedArray()
     private val widgetScene: WidgetScene? = if (debugWidgetScene) WidgetSceneRegistry().apply {
         register(WidgetSceneRegistry.DEBUG_SCENE) { DebugWidgetScene() }
-    }.create(WidgetSceneRegistry.DEBUG_SCENE) else if (worldTimeWidgetScene) WidgetSceneRegistry.production().create(WidgetIds.WORLD_TIME) else null
+    }.create(WidgetSceneRegistry.DEBUG_SCENE) else when (sceneType) {
+        WidgetSceneType.WORLD_TIME -> WidgetSceneRegistry.production().create(WidgetIds.WORLD_TIME)
+        WidgetSceneType.WEATHER -> WidgetSceneRegistry.production().create(WeatherWidgetIds.WEATHER)
+        null -> null
+    }
     private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null
-    private val worldTimeDataSource: WorldTimeDataSource? = if (worldTimeWidgetScene) WorldTimeDataSource().also { it.publishNow() } else null
-    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource
+    private val worldTimeDataSource: WorldTimeDataSource? = if (sceneType == WidgetSceneType.WORLD_TIME) WorldTimeDataSource().also { it.publishNow() } else null
+    private val weatherDataSource: WeatherWidgetDataSource? = if (sceneType == WidgetSceneType.WEATHER) WeatherWidgetDataSource().also { it.publishWeather(weatherInfo) } else null
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
-        if (debugWidgetScene || worldTimeWidgetScene) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
+        if (debugWidgetScene || sceneType != null) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
         widgetScene,
         widgetDataSource,
         debugDataSource,
@@ -102,7 +115,7 @@ private class ShellPrototypeContainer(
         workspacePanels.indexOfFirst { it.id == selectedPanelId }.coerceAtLeast(0)) {
             index -> onExit(workspacePanels.getOrNull(index)?.id ?: workspacePanels.first().id)
         }
-    private val worldTimeInfo: TextView? = if (worldTimeWidgetScene) TextView(context).apply {
+    private val worldTimeInfo: TextView? = if (sceneType == WidgetSceneType.WORLD_TIME) TextView(context).apply {
         setTextColor(Color.WHITE)
         textSize = 18f
         setShadowLayer(6f, 0f, 2f, Color.BLACK)

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import br.com.ne3d.spbshellmodern.model.*
 import br.com.ne3d.spbshellmodern.shell3d.ShellPrototypeScreen
+import br.com.ne3d.spbshellmodern.shell3d.WidgetSceneType
 
 @Composable
 fun LauncherPanel(
@@ -95,7 +96,10 @@ fun LauncherPanel(
                 }
                 PanelType.MOON -> SpbMoonCard(presentation, renderState, enabled)
                 PanelType.PHOTOS, PanelType.GALLERY, PanelType.PICTURE -> SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
-                PanelType.WEATHER, PanelType.WEATHER_CURRENT, PanelType.WEATHER_GRAPH -> SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, panel.type == PanelType.WEATHER_GRAPH, renderState, presentation, enabled)
+                PanelType.WEATHER -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.WEATHER, weatherInfo = weather, modifier = Modifier.fillMaxSize())
+                } else SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, false, renderState, presentation, enabled)
+                PanelType.WEATHER_CURRENT, PanelType.WEATHER_GRAPH -> SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, panel.type == PanelType.WEATHER_GRAPH, renderState, presentation, enabled)
                 PanelType.ANDROID_WIDGET -> SpbAndroidWidget(panel.id, enabled)
                 else -> SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
             }
