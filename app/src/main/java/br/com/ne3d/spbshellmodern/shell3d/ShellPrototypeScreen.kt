@@ -60,6 +60,12 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosTextureStore
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.ContactsDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.system.NotificationDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.system.NotificationBridge
+import br.com.ne3d.spbshellmodern.shell3d.widgets.system.NotificationAccess
+import br.com.ne3d.spbshellmodern.shell3d.widgets.system.NotificationScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.system.SystemDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.system.SystemStateRepository
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -123,7 +129,9 @@ private class ShellPrototypeContainer(
     private val calendarDataSource: CalendarDataSource? = if (sceneType == WidgetSceneType.CALENDAR) CalendarDataSource() else null
     private val photosDataSource: PhotosDataSource? = if (sceneType == WidgetSceneType.PHOTOS) PhotosDataSource() else null
     private val contactsDataSource: ContactsDataSource? = if (sceneType == WidgetSceneType.CONTACTS) ContactsDataSource() else null
-    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource ?: calendarDataSource ?: photosDataSource ?: contactsDataSource
+    private val notificationDataSource: NotificationDataSource? = if (sceneType == WidgetSceneType.NOTIFICATIONS) NotificationDataSource() else null
+    private val systemDataSource: SystemDataSource? = if (sceneType == WidgetSceneType.SYSTEM) SystemDataSource() else null
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource ?: calendarDataSource ?: photosDataSource ?: contactsDataSource ?: notificationDataSource ?: systemDataSource
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
         if (debugWidgetScene || sceneType != null) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
         widgetScene,
@@ -147,7 +155,7 @@ private class ShellPrototypeContainer(
     private var lifecycleOwner: LifecycleOwner? = null
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onPause(owner: LifecycleOwner) = surface.pauseRenderer()
-        override fun onResume(owner: LifecycleOwner) = surface.resumeRenderer()
+        override fun onResume(owner: LifecycleOwner) { surface.resumeRenderer(); refreshSystem() }
         override fun onDestroy(owner: LifecycleOwner) = surface.stopRenderer()
     }
     init {
@@ -161,6 +169,8 @@ private class ShellPrototypeContainer(
         if (calendarDataSource != null) refreshCalendar()
         if (photosDataSource != null) refreshPhotos()
         if (contactsDataSource != null) refreshContacts()
+        notificationDataSource?.let { source -> if (NotificationAccess.isAuthorized(context)) NotificationBridge.register(source) else source.publishNotifications(false, emptyList()) }
+        if (systemDataSource != null) refreshSystem()
     }
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
@@ -200,6 +210,7 @@ private class ShellPrototypeContainer(
             post { if (!photosDetached) surface.onWidgetSnapshotPublished() }
         }.start()
     }
+    private fun refreshSystem() { systemDataSource?.let { SystemStateRepository(context).publish(it); surface.onWidgetSnapshotPublished() } }
     private fun refreshContacts() {
         Thread {
             val (available, contacts) = PersonalWidgetRepository(context).contacts()
@@ -216,6 +227,7 @@ private class ShellPrototypeContainer(
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         lifecycleOwner = null
         photosTextureStore?.release()
+        notificationDataSource?.let(NotificationBridge::unregister)
         super.onDetachedFromWindow()
     }
     private fun updateWorldTimeInfo(snapshot: WorldTimeSnapshot?) {
@@ -320,6 +332,8 @@ private class ShellPrototypeView(
         if (worldTimeDataSource != null) {
             setOnTouchListener { _, event -> onWorldTimeTouch(event) }
             refreshWorldTimeAndSchedule()
+        } else if (widgetScene is NotificationScene) {
+            setOnTouchListener { _, event -> onNotificationTouch(event) }
         } else if (gesturesEnabled) {
             setOnTouchListener { _: View, event -> gestures.onTouch(event) }
         } else { isClickable = false; isFocusable = false }
@@ -358,7 +372,13 @@ private class ShellPrototypeView(
         widgetController?.onSnapshotPublished()
         if (worldTimeDataSource != null) postDelayed(worldClockRefresh, WorldTimeClockSchedule.delayToNextMinute(System.currentTimeMillis()))
     }
-    private fun onWorldTimeTouch(event: MotionEvent): Boolean {
+    private fun onNotificationTouch(event: MotionEvent): Boolean {
+        if (event.actionMasked != MotionEvent.ACTION_UP) return true
+        val scene = widgetScene as? NotificationScene ?: return false
+        widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.Tap(event.x, event.y)) }
+        widgetController?.onSnapshotPublished()
+        return true
+    }    private fun onWorldTimeTouch(event: MotionEvent): Boolean {
         val scene = widgetScene as? WorldTimeScene ?: return false
         return when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
