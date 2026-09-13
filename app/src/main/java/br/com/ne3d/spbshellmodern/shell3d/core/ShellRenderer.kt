@@ -17,6 +17,8 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.*
 import java.util.concurrent.atomic.AtomicReference
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneContext
 
 class ShellRenderer(
     val engine: ShellEngine,
@@ -27,12 +29,14 @@ class ShellRenderer(
     private val onExitFinished: () -> Unit,
     private val onTextureUploadsDrained: () -> Unit,
     private val pendingTextures: Array<PendingTexture>,
+    private val widgetScene: WidgetScene? = null,
+    private val onWidgetAnimationChanged: (Boolean) -> Unit = {},
 ) : GLSurfaceView.Renderer {
     data class PendingTexture(val key: String, val bitmap: AtomicReference<Bitmap?>)
     private val camera = ShellCamera(engine.spec); private val textures = TextureManager(); private val vp = FloatArray(16); private val model = FloatArray(16); private val mvp = FloatArray(16)
     private val layout = CarouselLayout(engine.spec); private val metrics = FrameMetrics()
     private var program = 0; private var width = 1; private var height = 1; private var lastNanos = 0L
-    private var positionLocation = -1; private var uvLocation = -1; private var matrixLocation = -1; private var textureLocation = -1; private var alphaLocation = -1; private var mirrorPassLocation = -1
+    private var positionLocation = -1; private var uvLocation = -1; private var matrixLocation = -1; private var textureLocation = -1; private var alphaLocation = -1; private var mirrorPassLocation = -1; private var colorLocation = -1; private var useTextureLocation = -1; private var widgetPrepared = false; private var widgetAnimating = false
     private var panelHalfHeight = engine.spec.panelAspectRatio
     private val panelTransform = MutablePanelTransform()
     private val effectInput = EffectInput()
@@ -48,6 +52,8 @@ class ShellRenderer(
         textureLocation = GLES30.glGetUniformLocation(program, "uTexture")
         alphaLocation = GLES30.glGetUniformLocation(program, "uAlpha")
         mirrorPassLocation = GLES30.glGetUniformLocation(program, "uMirrorPass")
+        colorLocation = GLES30.glGetUniformLocation(program, "uColor")
+        useTextureLocation = GLES30.glGetUniformLocation(program, "uUseTexture")
         engine.state.panels.forEach { metrics.textureUpload(textures.label(it.id, it.label, it.color).bytes) }
         lastNanos = System.nanoTime()
         onSurfaceReady()
@@ -57,6 +63,7 @@ class ShellRenderer(
         // Cards are vertical 9:16 faces regardless of the phone viewport.
         panelHalfHeight = engine.spec.panelAspectRatio
         GLES30.glViewport(0, 0, w, h)
+        if (!widgetPrepared) { widgetScene?.prepare(WidgetSceneContext(1f, w, h, {})); widgetPrepared = widgetScene != null }
     }
     override fun onDrawFrame(gl: GL10?) {
         val now = System.nanoTime()
@@ -65,7 +72,8 @@ class ShellRenderer(
         // Entry/exit tracks are not active in this prototype yet; keep their cost separately visible.
         val animationNanos = Debug.threadCpuTimeNanos() - animationStart
         val physicsStart = Debug.threadCpuTimeNanos()
-        val active = engine.tick(((now-lastNanos)/1_000_000_000f).coerceIn(0f,.05f))
+        val dtSeconds = ((now-lastNanos)/1_000_000_000f).coerceIn(0f,.05f)
+        val active = engine.tick(dtSeconds)
         val physicsNanos = Debug.threadCpuTimeNanos() - physicsStart
         lastNanos=now
         val textureStart = Debug.threadCpuTimeNanos()
@@ -86,6 +94,7 @@ class ShellRenderer(
         camera.matrix(width, height, vp, if (exiting) engine.exit.fov else engine.entry.fov, if (exiting) engine.exit.cameraZ else engine.entry.cameraZ, if (exiting) engine.exit.cameraY else engine.cameraY)
         val matrixNanos = Debug.threadCpuTimeNanos() - matrixStart
         GLES30.glUseProgram(program); val position=positionLocation; val uv=uvLocation; val matrix=matrixLocation; val texture=textureLocation; val alpha=alphaLocation
+        GLES30.glUniform1i(useTextureLocation, 1); GLES30.glUniform4f(colorLocation,1f,1f,1f,1f)
         var drawn = 0
         var layoutNanos = 0L
         var panelMatrixNanos = 0L
@@ -137,6 +146,15 @@ class ShellRenderer(
             GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,1); GLES30.glUniform1f(alpha,panel.effectiveAlpha * .30f); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); panel.renderMesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,panel.renderMesh.indexCount,GLES30.GL_UNSIGNED_SHORT,panel.renderMesh.indices); drawn++
         }
         GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
+        val widgetActive = widgetScene?.tick(dtSeconds) ?: false
+        if (widgetActive != widgetAnimating) { widgetAnimating = widgetActive; onWidgetAnimationChanged(widgetActive) }
+        widgetScene?.graph?.renderItems()?.forEach { item ->
+            val node=item.node; val material=node.material ?: return@forEach; val mesh=node.mesh ?: return@forEach
+            mesh.vertices.position(MeshVertexLayout.POSITION_FLOAT_OFFSET); GLES30.glVertexAttribPointer(position,MeshVertexLayout.POSITION_COMPONENTS,GLES30.GL_FLOAT,false,mesh.strideBytes,mesh.vertices); GLES30.glEnableVertexAttribArray(position)
+            mesh.vertices.position(MeshVertexLayout.UV_FLOAT_OFFSET); GLES30.glVertexAttribPointer(uv,MeshVertexLayout.UV_COMPONENTS,GLES30.GL_FLOAT,false,mesh.strideBytes,mesh.vertices); GLES30.glEnableVertexAttribArray(uv)
+            Matrix.multiplyMM(mvp,0,vp,0,node.worldMatrix,0); val color=material.color; GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,0); GLES30.glUniform1i(useTextureLocation,if(material.textureId!=0)1 else 0); GLES30.glUniform4f(colorLocation,((color shr 16)and 255)/255f,((color shr 8)and 255)/255f,(color and 255)/255f,((color ushr 24)and 255)/255f); GLES30.glUniform1f(alpha,node.worldAlpha*material.alpha); if(material.textureId!=0){GLES30.glActiveTexture(GLES30.GL_TEXTURE0);GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,material.textureId);GLES30.glUniform1i(texture,0)};mesh.indices.position(0);GLES30.glDrawElements(GLES30.GL_TRIANGLES,mesh.indexCount,GLES30.GL_UNSIGNED_SHORT,mesh.indices);drawn++
+        }
+        GLES30.glUniform1i(useTextureLocation, 1); GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val drawNanos = Debug.threadCpuTimeNanos() - drawStart
         metrics.record(now, Debug.threadCpuTimeNanos() - frameCpuStart, animationNanos, physicsNanos, layoutNanos, matrixNanos + panelMatrixNanos, drawNanos, textureNanos, drawn, drawn)
         if (engine.consumeExitCompleted()) onExitFinished()
@@ -146,7 +164,7 @@ class ShellRenderer(
     }
     fun beginMeasurement() = metrics.reset()
     fun publishMeasurement(label: String) = metrics.publish(label)
-    fun release() { engine.releaseEffects(); for (pending in pendingTextures) pending.bitmap.getAndSet(null)?.recycle(); textures.destroy() }
+    fun release() { widgetScene?.release(); engine.releaseEffects(); for (pending in pendingTextures) pending.bitmap.getAndSet(null)?.recycle(); textures.destroy() }
     private fun program(): Int {
         fun shader(type: Int, source: String): Int {
             return GLES30.glCreateShader(type).also { handle ->
@@ -161,8 +179,8 @@ class ShellRenderer(
         """.trimIndent())
         val fragment = shader(GLES30.GL_FRAGMENT_SHADER, """
             #version 300 es
-            precision mediump float; in vec2 vUv; uniform sampler2D uTexture; uniform float uAlpha; uniform int uMirrorPass; out vec4 color;
-            void main(){color=texture(uTexture,vUv);float fade=uMirrorPass==1?smoothstep(.20,1.,vUv.y):1.;color.a*=uAlpha*fade;}
+            precision mediump float; in vec2 vUv; uniform sampler2D uTexture; uniform float uAlpha; uniform int uMirrorPass; uniform vec4 uColor; uniform int uUseTexture; out vec4 color;
+            void main(){color=uUseTexture==1?texture(uTexture,vUv):uColor;float fade=uMirrorPass==1?smoothstep(.20,1.,vUv.y):1.;color.a*=uAlpha*fade;}
         """.trimIndent())
         return GLES30.glCreateProgram().also { handle ->
             GLES30.glAttachShader(handle, vertex); GLES30.glAttachShader(handle, fragment)

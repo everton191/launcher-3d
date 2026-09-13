@@ -32,6 +32,10 @@ import br.com.ne3d.spbshellmodern.ui.LauncherPanel
 import java.util.concurrent.atomic.AtomicReference
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneRegistry
+import br.com.ne3d.spbshellmodern.shell3d.widgets.debug.DebugWidgetScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.interaction.WidgetInteraction
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -40,12 +44,13 @@ import androidx.lifecycle.LifecycleOwner
     includeRealPanels: Boolean = true,
     exitOnTap: Boolean = true,
     gesturesEnabled: Boolean = true,
+    debugWidgetScene: Boolean = false,
     onExit: (String) -> Unit = {},
     modifier: Modifier = Modifier,
-) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled) {
+) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene) {
     val lifecycleOwner = LocalLifecycleOwner.current
     AndroidView(
-        factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, onExit) },
+        factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, onExit) },
         update = { it.onExit = onExit; it.bindLifecycle(lifecycleOwner) },
         modifier = modifier,
     )
@@ -58,14 +63,19 @@ private class ShellPrototypeContainer(
     includeRealPanels: Boolean,
     exitOnTap: Boolean,
     gesturesEnabled: Boolean,
+    debugWidgetScene: Boolean,
     var onExit: (String) -> Unit,
 ) : FrameLayout(context) {
-    private val hasRealSnapshots = includeRealPanels
+    private val hasRealSnapshots = includeRealPanels && !debugWidgetScene
     private var captureRequested = false
     private val workspacePanels = panels.ifEmpty { listOf(panelTemplate(PanelType.HOME)) }
     private val pendingTextures = workspacePanels.map { ShellRenderer.PendingTexture(it.id, AtomicReference<Bitmap?>(null)) }.toTypedArray()
-    private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap, gesturesEnabled,
-        workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
+    private val debugScene: WidgetScene? = if (debugWidgetScene) WidgetSceneRegistry().apply {
+        register(WidgetSceneRegistry.DEBUG_SCENE) { DebugWidgetScene() }
+    }.create(WidgetSceneRegistry.DEBUG_SCENE) else null
+    private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
+        if (debugWidgetScene) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
+        debugScene,
         workspacePanels.indexOfFirst { it.id == selectedPanelId }.coerceAtLeast(0)) {
             index -> onExit(workspacePanels.getOrNull(index)?.id ?: workspacePanels.first().id)
         }
@@ -79,7 +89,7 @@ private class ShellPrototypeContainer(
     init {
         Log.i("Shell3D.Capture", "container panels=${workspacePanels.size}")
         addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        if (includeRealPanels) {
+        if (hasRealSnapshots) {
             for (capture in captures) addView(capture.view, LayoutParams(PanelSnapshotCapture.WIDTH, PanelSnapshotCapture.HEIGHT))
             surface.onSurfaceReady = { captureRequested = false; requestCaptureAfterLayout() }
         }
@@ -123,6 +133,7 @@ private class ShellPrototypeView(
     exitOnTap: Boolean,
     gesturesEnabled: Boolean,
     panels: List<Panel3D>,
+    private val widgetScene: WidgetScene?,
     initialSelectedIndex: Int,
     private val onExit: (Int) -> Unit,
 ) : GLSurfaceView(context) {
@@ -154,6 +165,8 @@ private class ShellPrototypeView(
         onExitFinished = { post { onExit(engine.selectedIndex) } },
         onTextureUploadsDrained = { post { scheduler.deactivate(FrameReason.TEXTURE_UPLOAD) } },
         pendingTextures = pendingTextures,
+        widgetScene = widgetScene,
+        onWidgetAnimationChanged = { active -> post { if(active) scheduler.activate(FrameReason.WIDGET_ANIMATION) else scheduler.deactivate(FrameReason.WIDGET_ANIMATION) } },
     )
     private val gestures = GestureController(engine, {
         removeCallbacks(settleMeasurement)
@@ -161,7 +174,11 @@ private class ShellPrototypeView(
         scheduler.invalidateOnce()
         postDelayed(settleMeasurement, MEASUREMENT_WINDOW_MS)
     }, onTap = { x ->
-        if (exitOnTap) {
+        if (widgetScene != null) {
+            val localX = (x / width.coerceAtLeast(1).toFloat() - .5f) * 3f
+            widgetScene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f))
+            scheduler.activate(FrameReason.WIDGET_ANIMATION); scheduler.invalidateOnce()
+        } else if (exitOnTap) {
             engine.beginExitForPanel(engine.panelIndexAt(x, width.toFloat()))
             scheduler.activate(FrameReason.TRANSITION)
             scheduler.invalidateOnce()
