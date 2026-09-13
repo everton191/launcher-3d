@@ -82,6 +82,16 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
         }
     }
     fun setAngle(value: Float) { snap.cancel(); angle = normalized(value); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.IDLE }
+    /** Uses the same snap track and easing as a drag release; never teleports the ring. */
+    fun snapToIndex(index: Int, panelCount: Int) {
+        if (panelCount <= 0) return
+        val step = 360f / panelCount
+        val base = -index.mod(panelCount) * step
+        val target = base + round((angle - base) / 360f) * 360f
+        val distance = abs(target - angle)
+        val duration = (spec.snapMinDurationMs + ((spec.snapMaxDurationMs - spec.snapMinDurationMs) * (distance / step).coerceIn(0f, 1f))).toLong()
+        snap.begin(angle, target, duration); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.SNAP
+    }
 
     private fun beginSnap(panelCount: Int) {
         val step = 360f / panelCount

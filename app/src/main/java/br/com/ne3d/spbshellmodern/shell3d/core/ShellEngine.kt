@@ -11,6 +11,8 @@ import br.com.ne3d.spbshellmodern.shell3d.effects.configureEffect
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelTransitionController
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import kotlin.math.sin
+import kotlin.math.PI
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,6 +33,8 @@ class ShellEngine(
         private set
     private var autoRotationRequested = false
     private var autoWakePending = false
+    private var pendingOpenPanelIndex: Int? = null
+    private var texturesReady = false
     private val commands = ConcurrentLinkedQueue<Command>()
     private val effectContext: EffectContext
     private val pendingDxBits = AtomicInteger(0)
@@ -63,7 +67,7 @@ class ShellEngine(
     fun onGestureEnd() = commands.add(Command.GestureEnd)
     fun onVerticalDrag(dy: Float) = accumulate(pendingDyBits, dy)
     fun onFling(velocityX: Float) = commands.add(Command.Fling(velocityX))
-    fun beginExitAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.Exit(tapX, surfaceWidth))
+    fun openPanelAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.OpenAt(tapX, surfaceWidth))
     fun beginAutoRotation() = commands.add(Command.AutoRotate)
     fun beginPanelTransition(panel: Int, mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) = commands.add(Command.TransitionOpen(panel, mode))
     fun onTextureUploaded() = commands.add(Command.TextureReady)
@@ -87,6 +91,28 @@ class ShellEngine(
         selectedIndex = (centeredIndex + offset).mod(state.panels.size)
         exit.begin()
     }
+    private fun openAt(tapX: Float, surfaceWidth: Float) {
+        if (state.panels.isEmpty() || pendingOpenPanelIndex != null || transition.blocksInput) return
+        val targetX = (tapX / surfaceWidth.coerceAtLeast(1f) - .5f) * 2f
+        var bestIndex = 0; var bestDistance = Float.MAX_VALUE
+        val step = 360f / state.panels.size
+        state.panels.indices.forEach { index ->
+            val angle = index * step + carousel.angle
+            val projectedX = sin(angle * PI / 180.0).toFloat()
+            val distance = abs(projectedX - targetX)
+            if (distance < bestDistance) { bestDistance = distance; bestIndex = index }
+        }
+        pendingOpenPanelIndex = bestIndex
+        carousel.snapToIndex(bestIndex, state.panels.size)
+    }
+    private fun startPendingOpen() {
+        val index = pendingOpenPanelIndex ?: return
+        pendingOpenPanelIndex = null
+        selectedIndex = index
+        state.panels[index].configureEffect(PanelEffectDebug.mode)
+        transition.requestOpen(index, PanelEffectDebug.mode)
+        if (texturesReady) transition.onTextureReady()
+    }
     fun tick(dt: Float): Boolean {
         drainCommands()
         transition.tick(dt)
@@ -97,6 +123,7 @@ class ShellEngine(
         if (carousel.dragging) return true
         val settling = carousel.tick(dt, state.panels.size)
         if (settling) return true
+        if (pendingOpenPanelIndex != null) { startPendingOpen(); return true }
         if (autoRotationRequested) {
             carousel.autoRotate(dt * AUTO_ROTATE_DEGREES_PER_SECOND)
             return true
@@ -122,8 +149,9 @@ class ShellEngine(
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
             is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
             is Command.Exit -> applyExit(command.tapX, command.width)
+            is Command.OpenAt -> openAt(command.tapX, command.width)
             is Command.TransitionOpen -> transition.requestOpen(command.panel, command.mode)
-            Command.TextureReady -> transition.onTextureReady()
+            Command.TextureReady -> { texturesReady = true; transition.onTextureReady() }
             Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
             }
         }
@@ -150,6 +178,7 @@ class ShellEngine(
         data object AutoRotate : Command
         data class Fling(val velocityX: Float) : Command
         data class Exit(val tapX: Float, val width: Float) : Command
+        data class OpenAt(val tapX: Float, val width: Float) : Command
         data class TransitionOpen(val panel: Int, val mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) : Command
         data object TextureReady : Command
     }
