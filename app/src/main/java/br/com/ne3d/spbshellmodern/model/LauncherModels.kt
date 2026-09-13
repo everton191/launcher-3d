@@ -128,3 +128,4 @@ fun panelTemplate(type: PanelType, id: String = type.name.lowercase()) = Launche
     type = type,
     removable = type != PanelType.HOME && type != PanelType.APPS
 )
+

@@ -1,0 +1,2 @@
+package br.com.ne3d.spbshellmodern.model
+fun migrate3dPanelCatalog(workspace: ShellWorkspace): ShellWorkspace { val add=listOf(PanelType.WORLD_TIME,PanelType.MEDIA,PanelType.CALENDAR,PanelType.CONTACT,PanelType.MESSAGES,PanelType.INDICATORS); val active=workspace.panels.toMutableList(); val known=(workspace.panels+workspace.storedPanels).map{it.type}.toMutableSet(); for(type in add){if(active.size>=MAX_PANELS)break;if(known.add(type))active+=panelTemplate(type,freshPanelId(type))}; return workspace.copy(panels=active) }

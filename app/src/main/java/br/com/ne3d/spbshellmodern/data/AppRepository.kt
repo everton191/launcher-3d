@@ -6,6 +6,7 @@ import android.content.Intent
 import java.text.Collator
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import br.com.ne3d.spbshellmodern.model.*
 import kotlinx.coroutines.flow.first
@@ -65,13 +66,16 @@ class PanelPreferencesRepository(private val context: Context) {
     private val orderKey = stringPreferencesKey("panel_order")
     private val activeKey = stringPreferencesKey("active_panel")
     private val weatherCityKey = stringPreferencesKey("weather_city")
+    private val catalogVersionKey = intPreferencesKey("workspace_3d_catalog_version")
 
     suspend fun loadWorkspace(): ShellWorkspace {
         // Persist migration immediately so repaired duplicate IDs remain stable on the next launch.
         val prefs = context.launcherDataStore.edit { prefs ->
-            val workspace = WorkspaceCodec.decode(prefs[workspaceKey], prefs[orderKey], prefs[activeKey])
+            val decoded = WorkspaceCodec.decode(prefs[workspaceKey], prefs[orderKey], prefs[activeKey])
+            val workspace = if ((prefs[catalogVersionKey] ?: 0) < 1) migrate3dPanelCatalog(decoded) else decoded
             prefs[workspaceKey] = WorkspaceCodec.encode(workspace)
             prefs[activeKey] = workspace.activePanelId
+            prefs[catalogVersionKey] = 1
         }
         return WorkspaceCodec.decode(prefs[workspaceKey])
     }
@@ -264,3 +268,5 @@ fun weatherDescription(code: Int): String = when (code) {
     in 95..99 -> "Tempestade"
     else -> "Condição atual"
 }
+
+
