@@ -89,6 +89,7 @@ private class ShellPrototypeContainer(
     private val weatherInfo: WeatherInfo?,
     var onExit: (String) -> Unit,
 ) : FrameLayout(context) {
+    private var lastWeatherInfo: WeatherInfo? = weatherInfo
     private val sceneType = requestedWidgetScene ?: if (worldTimeWidgetScene) WidgetSceneType.WORLD_TIME else null
     private val hasRealSnapshots = includeRealPanels && !debugWidgetScene && sceneType == null
     private var captureRequested = false
@@ -156,7 +157,11 @@ private class ShellPrototypeContainer(
         lifecycleOwner = owner
         owner.lifecycle.addObserver(lifecycleObserver)
     }
-    fun updateWeather(weather: WeatherInfo?) { surface.updateWeather(weather) }
+    fun updateWeather(weather: WeatherInfo?) {
+        if (weather == lastWeatherInfo) return
+        lastWeatherInfo = weather
+        surface.updateWeather(weather)
+    }
     override fun onDetachedFromWindow() {
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         lifecycleOwner = null
