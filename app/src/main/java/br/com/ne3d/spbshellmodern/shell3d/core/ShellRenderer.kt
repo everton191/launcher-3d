@@ -148,11 +148,15 @@ class ShellRenderer(
         GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val widgetActive = widgetScene?.tick(dtSeconds) ?: false
         if (widgetActive != widgetAnimating) { widgetAnimating = widgetActive; onWidgetAnimationChanged(widgetActive) }
-        widgetScene?.graph?.renderItems()?.forEach { item ->
-            val node=item.node; val material=node.material ?: return@forEach; val mesh=node.mesh ?: return@forEach
+        widgetScene?.graph?.collectRenderItems()
+        var widgetIndex = 0
+        val widgetCount = widgetScene?.graph?.renderItemCount() ?: 0
+        while (widgetIndex < widgetCount) {
+            val item = widgetScene!!.graph.renderItemAt(widgetIndex); val node=item.node; val material=node.material ?: run { widgetIndex++; continue }; val mesh=node.mesh ?: run { widgetIndex++; continue }
             mesh.vertices.position(MeshVertexLayout.POSITION_FLOAT_OFFSET); GLES30.glVertexAttribPointer(position,MeshVertexLayout.POSITION_COMPONENTS,GLES30.GL_FLOAT,false,mesh.strideBytes,mesh.vertices); GLES30.glEnableVertexAttribArray(position)
             mesh.vertices.position(MeshVertexLayout.UV_FLOAT_OFFSET); GLES30.glVertexAttribPointer(uv,MeshVertexLayout.UV_COMPONENTS,GLES30.GL_FLOAT,false,mesh.strideBytes,mesh.vertices); GLES30.glEnableVertexAttribArray(uv)
             Matrix.multiplyMM(mvp,0,vp,0,node.worldMatrix,0); val color=material.color; GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,0); GLES30.glUniform1i(useTextureLocation,if(material.textureId!=0)1 else 0); GLES30.glUniform4f(colorLocation,((color shr 16)and 255)/255f,((color shr 8)and 255)/255f,(color and 255)/255f,((color ushr 24)and 255)/255f); GLES30.glUniform1f(alpha,node.worldAlpha*material.alpha); if(material.textureId!=0){GLES30.glActiveTexture(GLES30.GL_TEXTURE0);GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,material.textureId);GLES30.glUniform1i(texture,0)};mesh.indices.position(0);GLES30.glDrawElements(GLES30.GL_TRIANGLES,mesh.indexCount,GLES30.GL_UNSIGNED_SHORT,mesh.indices);drawn++
+            widgetIndex++
         }
         GLES30.glUniform1i(useTextureLocation, 1); GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val drawNanos = Debug.threadCpuTimeNanos() - drawStart

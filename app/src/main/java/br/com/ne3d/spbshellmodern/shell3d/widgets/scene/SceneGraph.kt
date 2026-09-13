@@ -24,7 +24,9 @@ class SceneGraph(val root: SceneNode = SceneNode("root")) {
     private val items = ArrayList<WidgetRenderItem>(16)
     fun find(id: String): SceneNode? = find(root, id)
     fun updateWorld() { SceneMatrix.identity(root.worldMatrix); root.worldAlpha=1f; root.worldVisible=true; updateChildren(root) }
-    fun renderItems(): List<WidgetRenderItem> { items.clear(); collect(root); return items }
+    fun collectRenderItems() { items.clear(); collect(root) }
+    fun renderItemCount(): Int = items.size
+    fun renderItemAt(index: Int): WidgetRenderItem = items[index]
     fun clear() { while(root.children().isNotEmpty()) root.remove(root.children().last()) }
     private fun find(node: SceneNode, id: String): SceneNode? { if(node.id==id)return node; var i=0; val children=node.children(); while(i<children.size){ val found=find(children[i],id); if(found!=null)return found; i++ }; return null }
     private fun updateChildren(parent: SceneNode) { val children=parent.children(); var i=0; while(i<children.size){ val node=children[i]; SceneMatrix.local(node.localMatrix,node.local); SceneMatrix.multiply(node.worldMatrix,parent.worldMatrix,node.localMatrix); node.worldAlpha=parent.worldAlpha*node.local.alpha; node.worldVisible=parent.worldVisible && node.local.alpha>0f; updateChildren(node); i++ } }
