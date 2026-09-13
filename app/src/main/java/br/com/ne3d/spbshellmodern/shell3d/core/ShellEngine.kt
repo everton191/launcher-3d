@@ -34,6 +34,7 @@ class ShellEngine(
     private var autoRotationRequested = false
     private var autoWakePending = false
     private var pendingOpenPanelIndex: Int? = null
+    private var panelOpenReady = false
     private var texturesReady = false
     private val commands = ConcurrentLinkedQueue<Command>()
     private val effectContext: EffectContext
@@ -110,9 +111,9 @@ class ShellEngine(
         val index = pendingOpenPanelIndex ?: return
         pendingOpenPanelIndex = null
         selectedIndex = index
-        state.panels[index].configureEffect(PanelEffectDebug.mode)
-        transition.requestOpen(index, PanelEffectDebug.mode)
-        if (texturesReady) transition.onTextureReady()
+        // A launcher card represents a full workspace page. The host owns that page;
+        // opening it is deliberately separate from the legacy carousel exit animation.
+        panelOpenReady = true
     }
     fun tick(dt: Float): Boolean {
         drainCommands()
@@ -134,6 +135,7 @@ class ShellEngine(
         return false
     }
     fun consumeExitCompleted() = exit.consumeCompleted()
+    fun consumePanelOpenReady(): Boolean = panelOpenReady.also { panelOpenReady = false }
     fun consumeComposeReady() = transition.consumeComposeReady()
     fun consumeAutoWakePending(): Boolean = autoWakePending.also { autoWakePending = false }
     /** GL-owner terminal cleanup; safe to call more than once. */

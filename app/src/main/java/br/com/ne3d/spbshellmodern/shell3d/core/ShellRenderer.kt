@@ -138,7 +138,7 @@ class ShellRenderer(
         GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val drawNanos = Debug.threadCpuTimeNanos() - drawStart
         metrics.record(now, Debug.threadCpuTimeNanos() - frameCpuStart, animationNanos, physicsNanos, layoutNanos, matrixNanos + panelMatrixNanos, drawNanos, textureNanos, drawn, drawn)
-        if (engine.consumeExitCompleted() || engine.consumeComposeReady()) onExitFinished()
+        if (engine.consumeExitCompleted() || engine.consumeComposeReady() || engine.consumePanelOpenReady()) onExitFinished()
         if (engine.consumeAutoWakePending()) onAutoWakeNeeded()
         if (!active) onEngineIdle()
         onFrameDrawn()
