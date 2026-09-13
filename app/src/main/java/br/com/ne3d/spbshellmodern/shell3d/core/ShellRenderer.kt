@@ -4,6 +4,7 @@ import android.opengl.*
 import br.com.ne3d.spbshellmodern.shell3d.camera.ShellCamera
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselLayout
 import br.com.ne3d.spbshellmodern.shell3d.carousel.MutablePanelTransform
+import br.com.ne3d.spbshellmodern.shell3d.carousel.ReflectionMath
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectInput
 import br.com.ne3d.spbshellmodern.shell3d.scene.MeshVertexLayout
 import br.com.ne3d.spbshellmodern.shell3d.debug.FrameMetrics
@@ -105,6 +106,7 @@ class ShellRenderer(
             effectInput.angle = panelTransform.angle
             effectInput.velocity = engine.carousel.velocity
             panel.effectStack.apply(panel, effectInput)
+            if (panel.deformerStack.isEmpty()) panel.resetRenderMesh() else panel.deformerStack.apply(panel, effectInput)
             layoutNanos += Debug.threadCpuTimeNanos() - layoutStart
             val transform = panel.renderTransform
             if (!transform.visible || textures.textureId(panel.id) == 0) return@forEachIndexed
@@ -114,11 +116,11 @@ class ShellRenderer(
             val exitScale = transform.scaleX * if (exiting && index == engine.selectedIndex) 1f + engine.exit.progress * .12f else 1f
             val exitAlpha = if (exiting && index != engine.selectedIndex) 1f - engine.exit.progress else 1f
             val entryAlpha = if (engine.entry.active && index != 0) engine.entry.sideAlpha else 1f
-            // A single front reflection keeps the floor effect while avoiding a second
-            // draw call for every face on the older device GPU.
-            if (index == engine.selectedIndex) {
+            // The closest face fades its floor reflection in and out continuously.
+            val reflectionFocus = ReflectionMath.focus(panelTransform.angle, count)
+            if (reflectionFocus > 0f) {
                 Matrix.setIdentityM(model,0); Matrix.translateM(model,0,transform.x,transform.y - panelHalfHeight * 1.47f * exitScale,transform.z); Matrix.rotateM(model,0,transform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,exitScale,-exitScale,exitScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
-                GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1f(alpha,transform.alpha * exitAlpha * entryAlpha * .16f); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); panel.renderMesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,panel.renderMesh.indexCount,GLES30.GL_UNSIGNED_SHORT,panel.renderMesh.indices); drawn++
+                GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1f(alpha,transform.alpha * exitAlpha * entryAlpha * .16f * reflectionFocus); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); panel.renderMesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,panel.renderMesh.indexCount,GLES30.GL_UNSIGNED_SHORT,panel.renderMesh.indices); drawn++
             }
             Matrix.setIdentityM(model,0); Matrix.translateM(model,0,transform.x,transform.y,transform.z); Matrix.rotateM(model,0,transform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,exitScale,exitScale,exitScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
             panelMatrixNanos += Debug.threadCpuTimeNanos() - panelMatrixStart

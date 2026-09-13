@@ -4,7 +4,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /** Per-panel working vertices; base shared geometry is never mutated. */
-class MutableMesh(private val base: Mesh) : RenderMesh {
+class MutableMesh(val baseMesh: Mesh) : RenderMesh {
+    private val base = baseMesh
     private val data = FloatArray(base.vertexCount * 5)
     override val vertices = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
     override val indices = base.indices; override val vertexCount = base.vertexCount; override val indexCount = base.indexCount; override val strideBytes = base.strideBytes
