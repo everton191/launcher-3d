@@ -57,6 +57,7 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.CalendarDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PersonalWidgetRepository
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.ContactsDataSource
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -107,7 +108,7 @@ private class ShellPrototypeContainer(
         WidgetSceneType.MUSIC -> WidgetSceneRegistry.production().create("music")
         WidgetSceneType.CALENDAR -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CALENDAR)
         WidgetSceneType.PHOTOS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.PHOTOS)
-        WidgetSceneType.CONTACTS,
+        WidgetSceneType.CONTACTS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CONTACTS)
         WidgetSceneType.NOTIFICATIONS, WidgetSceneType.SYSTEM -> null
         null -> null
     }
@@ -117,7 +118,8 @@ private class ShellPrototypeContainer(
     private val musicDataSource: MusicDataSource? = if (sceneType == WidgetSceneType.MUSIC) MusicDataSource().also { it.publishState(false) } else null
     private val calendarDataSource: CalendarDataSource? = if (sceneType == WidgetSceneType.CALENDAR) CalendarDataSource() else null
     private val photosDataSource: PhotosDataSource? = if (sceneType == WidgetSceneType.PHOTOS) PhotosDataSource() else null
-    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource ?: calendarDataSource ?: photosDataSource
+    private val contactsDataSource: ContactsDataSource? = if (sceneType == WidgetSceneType.CONTACTS) ContactsDataSource() else null
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource ?: calendarDataSource ?: photosDataSource ?: contactsDataSource
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
         if (debugWidgetScene || sceneType != null) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
         widgetScene,
@@ -154,6 +156,7 @@ private class ShellPrototypeContainer(
         }
         if (calendarDataSource != null) refreshCalendar()
         if (photosDataSource != null) refreshPhotos()
+        if (contactsDataSource != null) refreshContacts()
     }
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
@@ -187,6 +190,13 @@ private class ShellPrototypeContainer(
         Thread {
             val (available, photos) = PersonalWidgetRepository(context).photos()
             photosDataSource?.publishPhotos(available, photos)
+            post { surface.onWidgetSnapshotPublished() }
+        }.start()
+    }
+    private fun refreshContacts() {
+        Thread {
+            val (available, contacts) = PersonalWidgetRepository(context).contacts()
+            contactsDataSource?.publishContacts(available, contacts)
             post { surface.onWidgetSnapshotPublished() }
         }.start()
     }

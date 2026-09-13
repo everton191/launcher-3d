@@ -106,6 +106,9 @@ fun LauncherPanel(
                 PanelType.CALENDAR -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.CALENDAR, modifier = Modifier.fillMaxSize())
                 } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
+                PanelType.CONTACT -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.CONTACTS, modifier = Modifier.fillMaxSize())
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
                 PanelType.PHOTOS -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.PHOTOS, modifier = Modifier.fillMaxSize())
                 } else SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
