@@ -103,6 +103,9 @@ fun LauncherPanel(
                 PanelType.MEDIA -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.MUSIC, modifier = Modifier.fillMaxSize())
                 } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
+                PanelType.CALENDAR -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.CALENDAR, modifier = Modifier.fillMaxSize())
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
                 PanelType.ANDROID_WIDGET -> SpbAndroidWidget(panel.id, enabled)
                 else -> SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
             }

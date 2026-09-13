@@ -54,6 +54,8 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeClockSchedu
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetIds
 import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.CalendarDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PersonalWidgetRepository
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -102,7 +104,8 @@ private class ShellPrototypeContainer(
         WidgetSceneType.WORLD_TIME -> WidgetSceneRegistry.production().create(WidgetIds.WORLD_TIME)
         WidgetSceneType.WEATHER -> WidgetSceneRegistry.production().create(WeatherWidgetIds.WEATHER)
         WidgetSceneType.MUSIC -> WidgetSceneRegistry.production().create("music")
-        WidgetSceneType.CALENDAR, WidgetSceneType.PHOTOS, WidgetSceneType.CONTACTS,
+        WidgetSceneType.CALENDAR -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CALENDAR)
+        WidgetSceneType.PHOTOS, WidgetSceneType.CONTACTS,
         WidgetSceneType.NOTIFICATIONS, WidgetSceneType.SYSTEM -> null
         null -> null
     }
@@ -110,7 +113,8 @@ private class ShellPrototypeContainer(
     private val worldTimeDataSource: WorldTimeDataSource? = if (sceneType == WidgetSceneType.WORLD_TIME) WorldTimeDataSource().also { it.publishNow() } else null
     private val weatherDataSource: WeatherWidgetDataSource? = if (sceneType == WidgetSceneType.WEATHER) WeatherWidgetDataSource().also { it.publishWeather(weatherInfo) } else null
     private val musicDataSource: MusicDataSource? = if (sceneType == WidgetSceneType.MUSIC) MusicDataSource().also { it.publishState(false) } else null
-    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource
+    private val calendarDataSource: CalendarDataSource? = if (sceneType == WidgetSceneType.CALENDAR) CalendarDataSource() else null
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource ?: calendarDataSource
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
         if (debugWidgetScene || sceneType != null) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
         widgetScene,
@@ -145,6 +149,7 @@ private class ShellPrototypeContainer(
             for (capture in captures) addView(capture.view, LayoutParams(PanelSnapshotCapture.WIDTH, PanelSnapshotCapture.HEIGHT))
             surface.onSurfaceReady = { captureRequested = false; requestCaptureAfterLayout() }
         }
+        if (calendarDataSource != null) refreshCalendar()
     }
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
@@ -166,6 +171,13 @@ private class ShellPrototypeContainer(
         if (weather == lastWeatherInfo) return
         lastWeatherInfo = weather
         surface.updateWeather(weather)
+    }
+    private fun refreshCalendar() {
+        Thread {
+            val (available, events) = PersonalWidgetRepository(context).calendar()
+            calendarDataSource?.publishEvents(available, events)
+            post { surface.onWidgetSnapshotPublished() }
+        }.start()
     }
     override fun onDetachedFromWindow() {
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
@@ -286,6 +298,7 @@ private class ShellPrototypeView(
         source.publishWeather(weather)
         widgetController?.onSnapshotPublished()
     }
+    fun onWidgetSnapshotPublished() { widgetController?.onSnapshotPublished() }
     fun pauseRenderer() {
         removeCallbacks(worldClockRefresh)
         widgetController?.pause()
