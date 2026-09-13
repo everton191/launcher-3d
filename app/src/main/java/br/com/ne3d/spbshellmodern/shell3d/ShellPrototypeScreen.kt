@@ -213,6 +213,7 @@ private class ShellPrototypeView(
         pendingTextures = pendingTextures,
         widgetController = widgetController,
         widgetDensity = resources.displayMetrics.density,
+        widgetResources = resources,
     )
     private val gestures = GestureController(engine, {
         removeCallbacks(settleMeasurement)
