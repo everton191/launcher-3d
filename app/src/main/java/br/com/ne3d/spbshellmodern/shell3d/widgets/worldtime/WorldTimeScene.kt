@@ -63,7 +63,7 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
                 mesh = MeshFactory.plane(.20f); material = WidgetMaterial(textureRef = WorldTimeLabelTexture.ref(city))
                 // The globe is mirrored to retain the requested reading direction.  Invert the
                 // label's X scale so its text keeps its normal, readable orientation.
-                local.x = p.x * 1.12f; local.y = p.y * 1.12f; local.z = p.z * 1.12f
+                local.x = p.x * 1.12f; local.y = p.y * 1.12f + if (city.id == "paris") -.09f else 0f; local.z = p.z * 1.12f
                 local.scaleX = -.18f; local.scaleY = .18f; local.scaleZ = .18f
             })
         }
