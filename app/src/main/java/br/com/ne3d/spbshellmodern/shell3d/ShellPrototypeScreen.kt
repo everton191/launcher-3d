@@ -100,6 +100,9 @@ private class ShellPrototypeContainer(
     }.create(WidgetSceneRegistry.DEBUG_SCENE) else when (sceneType) {
         WidgetSceneType.WORLD_TIME -> WidgetSceneRegistry.production().create(WidgetIds.WORLD_TIME)
         WidgetSceneType.WEATHER -> WidgetSceneRegistry.production().create(WeatherWidgetIds.WEATHER)
+        WidgetSceneType.MUSIC -> WidgetSceneRegistry.production().create("music")
+        WidgetSceneType.CALENDAR, WidgetSceneType.PHOTOS, WidgetSceneType.CONTACTS,
+        WidgetSceneType.NOTIFICATIONS, WidgetSceneType.SYSTEM -> null
         null -> null
     }
     private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null

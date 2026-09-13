@@ -4,6 +4,7 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WidgetIds
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetIds
+import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicScene
 
 /** Registry maps a future widget type to a scene factory without teaching the renderer widget names. */
 class WidgetSceneRegistry {
@@ -15,6 +16,7 @@ class WidgetSceneRegistry {
         fun production(): WidgetSceneRegistry = WidgetSceneRegistry().apply {
             register(WidgetIds.WORLD_TIME) { WorldTimeScene() }
             register(WeatherWidgetIds.WEATHER) { WeatherScene() }
+            register("music") { MusicScene() }
         }
     }
 }
