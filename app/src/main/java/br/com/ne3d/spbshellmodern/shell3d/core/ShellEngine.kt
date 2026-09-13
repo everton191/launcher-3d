@@ -133,6 +133,7 @@ class ShellEngine(
         return false
     }
     fun consumeExitCompleted() = exit.consumeCompleted()
+    fun consumeComposeReady() = transition.consumeComposeReady()
     fun consumeAutoWakePending(): Boolean = autoWakePending.also { autoWakePending = false }
     /** GL-owner terminal cleanup; safe to call more than once. */
     fun releaseEffects() { transition.release(); var index = 0; while (index < state.panels.size) { state.panels[index].effectStack.release(); state.panels[index].deformerStack.release(); index++ } }

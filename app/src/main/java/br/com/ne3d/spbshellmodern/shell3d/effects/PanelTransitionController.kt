@@ -16,6 +16,7 @@ class PanelTransitionController {
         private set
     var crossfadeProgress: Float = 0f
         private set
+    private var composeReady = false
 
     val blocksInput: Boolean get() = state == PanelTransitionState.CAPTURE_PENDING || state == PanelTransitionState.GL_OPENING || state == PanelTransitionState.GL_CLOSING
     val composeVisible: Boolean get() = state == PanelTransitionState.CAPTURE_PENDING || state == PanelTransitionState.COMPOSE_LIVE
@@ -35,12 +36,13 @@ class PanelTransitionController {
     fun tick(dtSeconds: Float) {
         val duration = when (mode) { PanelEffectMode.STACK -> .260f; PanelEffectMode.FOLD -> .320f; PanelEffectMode.ORIGAMI -> .360f; PanelEffectMode.NONE -> .100f }
         when (state) {
-            PanelTransitionState.GL_OPENING -> { progress = (progress + dtSeconds / duration).coerceAtMost(1f); crossfadeProgress = (crossfadeProgress + dtSeconds / CROSSFADE_SECONDS).coerceAtMost(1f); if (progress == 1f) state = PanelTransitionState.COMPOSE_LIVE }
+            PanelTransitionState.GL_OPENING -> { progress = (progress + dtSeconds / duration).coerceAtMost(1f); crossfadeProgress = (crossfadeProgress + dtSeconds / CROSSFADE_SECONDS).coerceAtMost(1f); if (progress == 1f) { state = PanelTransitionState.COMPOSE_LIVE; composeReady = true } }
             PanelTransitionState.GL_CLOSING -> { progress = (progress - dtSeconds / duration).coerceAtLeast(0f); crossfadeProgress = (crossfadeProgress + dtSeconds / CROSSFADE_SECONDS).coerceAtMost(1f); if (progress == 0f) reset() }
             else -> Unit
         }
     }
     fun release() = reset()
-    private fun reset() { state = PanelTransitionState.IDLE; mode = PanelEffectMode.NONE; progress = 0f; crossfadeProgress = 0f; direction = 1f; selectedPanel = -1 }
+    fun consumeComposeReady(): Boolean = composeReady.also { composeReady = false }
+    private fun reset() { state = PanelTransitionState.IDLE; mode = PanelEffectMode.NONE; progress = 0f; crossfadeProgress = 0f; direction = 1f; selectedPanel = -1; composeReady = false }
     private companion object { const val CROSSFADE_SECONDS = .100f }
 }
