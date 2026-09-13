@@ -5,6 +5,7 @@ import br.com.ne3d.spbshellmodern.shell3d.camera.ShellCamera
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselLayout
 import br.com.ne3d.spbshellmodern.shell3d.carousel.MutablePanelTransform
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectInput
+import br.com.ne3d.spbshellmodern.shell3d.scene.MeshVertexLayout
 import br.com.ne3d.spbshellmodern.shell3d.debug.FrameMetrics
 import br.com.ne3d.spbshellmodern.shell3d.texture.TextureManager
 import android.graphics.Bitmap
@@ -107,8 +108,8 @@ class ShellRenderer(
             layoutNanos += Debug.threadCpuTimeNanos() - layoutStart
             val transform = panel.renderTransform
             if (!transform.visible || textures.textureId(panel.id) == 0) return@forEachIndexed
-            panel.renderMesh.vertices.position(0); GLES30.glVertexAttribPointer(position,3,GLES30.GL_FLOAT,false,panel.renderMesh.strideBytes,panel.renderMesh.vertices); GLES30.glEnableVertexAttribArray(position)
-            panel.renderMesh.vertices.position(2); GLES30.glVertexAttribPointer(uv,2,GLES30.GL_FLOAT,false,panel.renderMesh.strideBytes,panel.renderMesh.vertices); GLES30.glEnableVertexAttribArray(uv)
+            panel.renderMesh.vertices.position(MeshVertexLayout.POSITION_FLOAT_OFFSET); GLES30.glVertexAttribPointer(position,MeshVertexLayout.POSITION_COMPONENTS,GLES30.GL_FLOAT,false,panel.renderMesh.strideBytes,panel.renderMesh.vertices); GLES30.glEnableVertexAttribArray(position)
+            panel.renderMesh.vertices.position(MeshVertexLayout.UV_FLOAT_OFFSET); GLES30.glVertexAttribPointer(uv,MeshVertexLayout.UV_COMPONENTS,GLES30.GL_FLOAT,false,panel.renderMesh.strideBytes,panel.renderMesh.vertices); GLES30.glEnableVertexAttribArray(uv)
             val panelMatrixStart = Debug.threadCpuTimeNanos()
             val exitScale = transform.scaleX * if (exiting && index == engine.selectedIndex) 1f + engine.exit.progress * .12f else 1f
             val exitAlpha = if (exiting && index != engine.selectedIndex) 1f - engine.exit.progress else 1f
