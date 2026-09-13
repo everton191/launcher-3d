@@ -338,6 +338,8 @@ private class ShellPrototypeView(
         if (worldTimeDataSource != null) {
             setOnTouchListener { _, event -> onWorldTimeTouch(event) }
             refreshWorldTimeAndSchedule()
+        } else if (widgetScene is MusicScene) {
+            setOnTouchListener { _, event -> onMusicTouch(event) }
         } else if (widgetScene is NotificationScene) {
             setOnTouchListener { _, event -> onNotificationTouch(event) }
         } else if (gesturesEnabled) {
@@ -378,7 +380,13 @@ private class ShellPrototypeView(
         widgetController?.onSnapshotPublished()
         if (worldTimeDataSource != null) postDelayed(worldClockRefresh, WorldTimeClockSchedule.delayToNextMinute(System.currentTimeMillis()))
     }
-    private fun onNotificationTouch(event: MotionEvent): Boolean {
+    private fun onMusicTouch(event: MotionEvent): Boolean {
+        if (event.actionMasked != MotionEvent.ACTION_UP) return true
+        val scene = widgetScene as? MusicScene ?: return false
+        widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.Tap(event.x, event.y)) }
+        widgetController?.onSnapshotPublished()
+        return true
+    }    private fun onNotificationTouch(event: MotionEvent): Boolean {
         if (event.actionMasked != MotionEvent.ACTION_UP) return true
         val scene = widgetScene as? NotificationScene ?: return false
         widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.Tap(event.x, event.y)) }
@@ -420,5 +428,6 @@ private class ShellPrototypeView(
         const val TOUCH_SLOP_PX = 12f
     }
 }
+
 
 
