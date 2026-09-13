@@ -11,3 +11,7 @@
 ## Runtime lifecycle
 
 `WorldTimeScene` declares a logical `WidgetTextureRef`; `ShellRenderer` and `TextureManager` own the GL texture, cache it by key, rebuild it after EGL context recreation, and release it during renderer release. If Android cannot decode the resource, a one-pixel project-color bitmap avoids a crash; the old procedural globe is no longer the normal visual.
+
+## Clouds
+
+`world_time_clouds.png` is a sparse transparent cloud mask generated locally at 512×256 px. It is loaded once by the same renderer texture cache, keeps the NASA base map cloud-free, and can be replaced by a WeatherScene layer later.

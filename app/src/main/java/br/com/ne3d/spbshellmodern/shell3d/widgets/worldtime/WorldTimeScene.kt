@@ -35,11 +35,18 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
             mesh = MeshFactory.uvSphere(28, 18, 1f)
             material = WidgetMaterial(textureRef = WorldTimeEarthTexture.ref)
         })
+        earth.add(SceneNode("cloud-layer").apply {
+            mesh = MeshFactory.uvSphere(28, 18, 1.024f)
+            material = WidgetMaterial(textureRef = WorldTimeCloudTexture.ref, alpha = .38f)
+        })
         cities.forEach { city ->
-            val p = WorldTimeCoordinates.latLon(city.latitude, city.longitude, 1.06f)
+            val p = WorldTimeCoordinates.latLon(city.latitude, city.longitude, 1.035f)
             markers[city.id] = earth.add(SceneNode("marker-${city.id}").apply {
-                mesh = MeshFactory.hexTile(.055f); material = WidgetMaterial(color = 0xFFE8D16A.toInt())
+                mesh = MeshFactory.uvSphere(8, 6, .042f); material = WidgetMaterial(color = 0xFFE8D16A.toInt())
                 local.x = p.x; local.y = p.y; local.z = p.z
+                // Rotate the marker's local +Z axis onto the Earth's outward normal.
+                local.rotationY = Math.toDegrees(kotlin.math.asin((p.x / 1.035f).toDouble())).toFloat()
+                local.rotationX = Math.toDegrees(kotlin.math.atan2((-p.y).toDouble(), p.z.toDouble())).toFloat()
             })
             points[city.id] = WidgetScreenPoint()
         }
@@ -64,7 +71,7 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
     override fun resume() { idleSeconds = 2f }
     override fun release() { markers.clear(); points.clear(); graph.clear(); prepared = false; idleSeconds = 0f; selectionListener = null }
     fun setSelectionListener(listener: ((String) -> Unit)?) { selectionListener = listener }
-    fun drag(deltaX: Float) { idleSeconds = 0f; earth.local.rotationY = (earth.local.rotationY + deltaX * .12f) % 360f; graph.updateWorld() }
+    fun drag(deltaX: Float) { idleSeconds = 0f; earth.local.rotationY = (earth.local.rotationY + deltaX * .35f) % 360f; graph.updateWorld() }
     fun select(cityId: String): Boolean {
         if (!markers.containsKey(cityId)) return false
         selected = cityId; idleSeconds = .45f; refreshSelection(); selectionListener?.invoke(cityId); return true

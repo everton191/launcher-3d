@@ -195,7 +195,7 @@ class ShellRenderer(
         val fragment = shader(GLES30.GL_FRAGMENT_SHADER, """
             #version 300 es
             precision mediump float; in vec2 vUv; uniform sampler2D uTexture; uniform float uAlpha; uniform int uMirrorPass; uniform vec4 uColor; uniform int uUseTexture; out vec4 color;
-            void main(){color=uUseTexture==1?texture(uTexture,vUv):uColor;float fade=uMirrorPass==1?smoothstep(.20,1.,vUv.y):1.;color.a*=uAlpha*fade;}
+            void main(){color=uUseTexture==1?texture(uTexture,vUv):uColor;if(color.a<=.001)discard;float fade=uMirrorPass==1?smoothstep(.20,1.,vUv.y):1.;color.a*=uAlpha*fade;}
         """.trimIndent())
         return GLES30.glCreateProgram().also { handle ->
             GLES30.glAttachShader(handle, vertex); GLES30.glAttachShader(handle, fragment)
