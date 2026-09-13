@@ -133,7 +133,7 @@ class ShellRenderer(
             // Keep the floor separation equal to the ring's face-to-face gap.
             val floorY = -panelHalfHeight - engine.spec.panelGap
             Matrix.setIdentityM(model,0); Matrix.translateM(model,0,transform.x,MirrorFloor.mirroredY(floorY, transform.y),transform.z); Matrix.rotateM(model,0,transform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,transform.scaleX,-transform.scaleY,transform.scaleZ); Matrix.multiplyMM(mvp,0,vp,0,model,0)
-            GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,1); GLES30.glUniform1f(alpha,transform.alpha * .18f); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); panel.renderMesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,panel.renderMesh.indexCount,GLES30.GL_UNSIGNED_SHORT,panel.renderMesh.indices); drawn++
+            GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,1); GLES30.glUniform1f(alpha,transform.alpha * .24f); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); panel.renderMesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,panel.renderMesh.indexCount,GLES30.GL_UNSIGNED_SHORT,panel.renderMesh.indices); drawn++
         }
         GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val drawNanos = Debug.threadCpuTimeNanos() - drawStart
@@ -161,7 +161,7 @@ class ShellRenderer(
         val fragment = shader(GLES30.GL_FRAGMENT_SHADER, """
             #version 300 es
             precision mediump float; in vec2 vUv; uniform sampler2D uTexture; uniform float uAlpha; uniform int uMirrorPass; out vec4 color;
-            void main(){color=texture(uTexture,vUv);float fade=uMirrorPass==1?smoothstep(.48,1.,vUv.y):1.;color.a*=uAlpha*fade;}
+            void main(){color=texture(uTexture,vUv);float fade=uMirrorPass==1?smoothstep(.20,1.,vUv.y):1.;color.a*=uAlpha*fade;}
         """.trimIndent())
         return GLES30.glCreateProgram().also { handle ->
             GLES30.glAttachShader(handle, vertex); GLES30.glAttachShader(handle, fragment)
