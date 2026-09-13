@@ -46,9 +46,10 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.data.WidgetDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.data.WidgetSnapshot
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeSnapshot
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeDataSource
-import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeCities
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeCities
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WidgetIds
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeClockSchedule
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -190,14 +191,7 @@ private class ShellPrototypeView(
     private var worldDownX = 0f
     private var worldLastX = 0f
     private var worldMoved = false
-    private val worldClockRefresh = object : Runnable {
-        override fun run() {
-            worldTimeDataSource?.publishNow()
-            onWorldTimeSnapshot(worldTimeDataSource?.latest())
-            widgetController?.onSnapshotPublished()
-            postDelayed(this, WORLD_CLOCK_REFRESH_MILLIS)
-        }
-    }
+    private val worldClockRefresh = Runnable { refreshWorldTimeAndSchedule() }
     private val settleMeasurement = Runnable {
         queueEvent { renderer.publishMeasurement("input-30s") }
     }
@@ -218,6 +212,7 @@ private class ShellPrototypeView(
         onTextureUploadsDrained = { post { scheduler.deactivate(FrameReason.TEXTURE_UPLOAD) } },
         pendingTextures = pendingTextures,
         widgetController = widgetController,
+        widgetDensity = resources.displayMetrics.density,
     )
     private val gestures = GestureController(engine, {
         removeCallbacks(settleMeasurement)
@@ -229,13 +224,6 @@ private class ShellPrototypeView(
             val localX = (x / width.coerceAtLeast(1).toFloat() - .5f) * 3f
             widgetController?.enqueue { widgetScene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f)) }
             if (localX >= .6f) debugDataSource?.advance()
-            worldTimeDataSource?.let { source ->
-                val cityIndex = ((x / width.coerceAtLeast(1).toFloat()) * WorldTimeCities.defaults.size)
-                    .toInt().coerceIn(0, WorldTimeCities.defaults.lastIndex)
-                val city = WorldTimeCities.defaults[cityIndex]
-                source.select(city.id)
-                widgetController?.enqueue { (widgetScene as? WorldTimeScene)?.select(city.id) }
-            }
             widgetController?.onSnapshotPublished()
         } else if (exitOnTap) {
             engine.beginExitForPanel(engine.panelIndexAt(x, width.toFloat()))
@@ -249,9 +237,16 @@ private class ShellPrototypeView(
     }, onGestureFinished = { scheduler.deactivate(FrameReason.INPUT) })
     init {
         setEGLContextClientVersion(3); setRenderer(renderer); renderMode = RENDERMODE_WHEN_DIRTY
+        (widgetScene as? WorldTimeScene)?.setSelectionListener { cityId ->
+            post {
+                worldTimeDataSource?.select(cityId)
+                onWorldTimeSnapshot(worldTimeDataSource?.latest())
+                widgetController?.onSnapshotPublished()
+            }
+        }
         if (worldTimeDataSource != null) {
             setOnTouchListener { _, event -> onWorldTimeTouch(event) }
-            post(worldClockRefresh)
+            refreshWorldTimeAndSchedule()
         } else if (gesturesEnabled) {
             setOnTouchListener { _: View, event -> gestures.onTouch(event) }
         } else { isClickable = false; isFocusable = false }
@@ -268,7 +263,7 @@ private class ShellPrototypeView(
     fun resumeRenderer() {
         super.onResume()
         widgetController?.resume()
-        if (worldTimeDataSource != null) post(worldClockRefresh)
+        if (worldTimeDataSource != null) refreshWorldTimeAndSchedule()
         scheduler.resume()
         if (engine.entry.active || engine.exit.active) scheduler.activate(FrameReason.TRANSITION) else scheduler.invalidateOnce()
     }
@@ -277,45 +272,33 @@ private class ShellPrototypeView(
         scheduler.shutdown()
         queueEvent { renderer.release() }
     }
+    private fun refreshWorldTimeAndSchedule() {
+        removeCallbacks(worldClockRefresh)
+        worldTimeDataSource?.publishNow()
+        onWorldTimeSnapshot(worldTimeDataSource?.latest())
+        widgetController?.onSnapshotPublished()
+        if (worldTimeDataSource != null) postDelayed(worldClockRefresh, WorldTimeClockSchedule.delayToNextMinute(System.currentTimeMillis()))
+    }
     private fun onWorldTimeTouch(event: MotionEvent): Boolean {
         val scene = widgetScene as? WorldTimeScene ?: return false
-        val localX = (event.x / width.coerceAtLeast(1).toFloat() - .5f) * 3f
         return when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                worldDownX = event.x
-                worldLastX = event.x
-                worldMoved = false
-                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragStart(localX, 0f)) }
-                true
+                worldDownX = event.x; worldLastX = event.x; worldMoved = false
+                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragStart(event.x, event.y)) }; true
             }
             MotionEvent.ACTION_MOVE -> {
                 val delta = event.x - worldLastX
                 if (kotlin.math.abs(event.x - worldDownX) > TOUCH_SLOP_PX) worldMoved = true
                 worldLastX = event.x
-                widgetController?.enqueue { scene.drag(delta) }
-                widgetController?.onSnapshotPublished()
-                true
+                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.Drag(delta, 0f)) }
+                widgetController?.onSnapshotPublished(); true
             }
             MotionEvent.ACTION_UP -> {
-                if (!worldMoved) {
-                    val cityIndex = ((event.x / width.coerceAtLeast(1).toFloat()) * WorldTimeCities.defaults.size)
-                        .toInt().coerceIn(0, WorldTimeCities.defaults.lastIndex)
-                    val city = WorldTimeCities.defaults[cityIndex]
-                    worldTimeDataSource?.select(city.id)
-                    onWorldTimeSnapshot(worldTimeDataSource?.latest())
-                    widgetController?.enqueue {
-                        scene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f))
-                        scene.select(city.id)
-                    }
-                }
+                if (!worldMoved) widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.Tap(event.x, event.y)) }
                 widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragEnd) }
-                widgetController?.onSnapshotPublished()
-                true
+                widgetController?.onSnapshotPublished(); true
             }
-            MotionEvent.ACTION_CANCEL -> {
-                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragEnd) }
-                true
-            }
+            MotionEvent.ACTION_CANCEL -> { widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragEnd) }; true }
             else -> false
         }
     }
@@ -329,7 +312,6 @@ private class ShellPrototypeView(
     override fun onDetachedFromWindow() { stopRenderer(); super.onDetachedFromWindow() }
     private companion object {
         const val MEASUREMENT_WINDOW_MS = 30_000L
-        const val WORLD_CLOCK_REFRESH_MILLIS = 60_000L
         const val TOUCH_SLOP_PX = 12f
     }
 }
