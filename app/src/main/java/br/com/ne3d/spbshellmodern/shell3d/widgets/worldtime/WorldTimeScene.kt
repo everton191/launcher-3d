@@ -27,6 +27,8 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
     private var selected = cities.first().id
     private var prepared = false
     private var selectionListener: ((String) -> Unit)? = null
+    // World Time defaults to a clean globe; city data stays available for future selection UI.
+    private val markersVisible = false
 
     override fun prepare(context: WidgetSceneContext) {
         if (prepared) return
@@ -89,6 +91,9 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
         }
         return bestId
     }
-    private fun refreshSelection() { markers.forEach { (id, node) -> node.material?.color = if (id == selected) 0xFFFFA24D.toInt() else 0xFFE8D16A.toInt() } }
+    private fun refreshSelection() { markers.forEach { (id, node) ->
+        node.material?.color = if (id == selected) 0xFFFFA24D.toInt() else 0xFFE8D16A.toInt()
+        node.material?.alpha = if (markersVisible) 1f else 0f
+    } }
 }
 object WidgetIds { const val WORLD_TIME = "world-time" }
