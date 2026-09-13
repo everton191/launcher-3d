@@ -26,7 +26,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             Log.i("Shell3D.Capture", "prototype=$shell3dPrototype realPanel=$shell3dRealPanel")
             if (shell3dPrototype) {
-                ShellPrototypeScreen(initialPanels(), includeRealPanels = shell3dRealPanel)
+                // The explicit prototype intent is also used for device validation.
+                // Its cards must therefore leave the overview just like HomeScreen's carousel.
+                ShellPrototypeScreen(initialPanels(), includeRealPanels = shell3dRealPanel, onExit = {
+                    shell3dPrototype = false
+                })
             }
             else HomeScreen(homeRequestId)
         }
