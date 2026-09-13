@@ -67,13 +67,13 @@ class OrigamiEffector(private val spec:PanelEffectSpec):MeshDeformer {
         for(i in 0 until mesh.vertexCount) {
             val sourceX=mesh.x(i)
             val segment=floor(((sourceX+1f)/segmentLength).toDouble()).toInt().coerceIn(0,folds-1)
-            var hingeX=-1f; var hingeZ=0f; var orientation=0f
+            var hingeX=-1f; var hingeZ=0f
             for(part in 0 until segment) {
-                orientation += if(part % 2 == 0) theta else -theta
+                val orientation = if(part % 2 == 0) theta else -theta
                 hingeX += segmentLength*cos(orientation)
                 hingeZ += segmentLength*sin(orientation)
             }
-            orientation += if(segment % 2 == 0) theta else -theta
+            val orientation = if(segment % 2 == 0) theta else -theta
             val segmentStart=-1f+segment*segmentLength
             val local=(sourceX-segmentStart).coerceIn(0f,segmentLength)
             mesh.setPosition(i,hingeX+local*cos(orientation),mesh.y(i),hingeZ+local*sin(orientation))

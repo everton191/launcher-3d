@@ -13,6 +13,7 @@ class GestureController(
 ) {
     private var lastX = 0f; private var lastY = 0f; private var totalDx = 0f; private var totalDy = 0f; private var downTime = 0L; private var tracker: VelocityTracker? = null
     fun onTouch(event: MotionEvent): Boolean {
+        if (engine.blocksInput()) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> { lastX = event.x; lastY = event.y; totalDx = 0f; totalDy = 0f; downTime = event.eventTime; engine.onGestureStart(); tracker = VelocityTracker.obtain().also { it.addMovement(event) }; onGestureStarted(); invalidate() }
             MotionEvent.ACTION_MOVE -> { val dx = event.x - lastX; val dy = event.y - lastY; totalDx += dx; totalDy += dy; if (kotlin.math.abs(dx) >= kotlin.math.abs(dy)) engine.onDrag(dx) else engine.onVerticalDrag(dy); lastX = event.x; lastY = event.y; tracker?.addMovement(event); invalidate() }

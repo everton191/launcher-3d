@@ -15,11 +15,11 @@ fun Panel3D.configureEffect(mode: PanelEffectMode, spec: PanelEffectSpec = Panel
         PanelEffectMode.NONE -> resetRenderMesh()
         PanelEffectMode.STACK -> effectStack.add(StackEffector(spec))
         PanelEffectMode.FOLD -> {
-            mesh = MeshFactory.segmentedPlane(8, 4, 16f / 9f)
+            effectMesh = MeshFactory.segmentedPlane(8, 4, 16f / 9f)
             deformerStack.add(FoldEffector(spec))
         }
         PanelEffectMode.ORIGAMI -> {
-            mesh = MeshFactory.segmentedPlane(8, 4, 16f / 9f)
+            effectMesh = MeshFactory.segmentedPlane(8, 4, 16f / 9f)
             deformerStack.add(OrigamiEffector(spec))
         }
     }

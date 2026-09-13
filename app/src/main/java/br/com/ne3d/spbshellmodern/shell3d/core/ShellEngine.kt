@@ -8,6 +8,7 @@ import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectDebug
 import br.com.ne3d.spbshellmodern.shell3d.effects.configureEffect
+import br.com.ne3d.spbshellmodern.shell3d.effects.PanelTransitionController
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -23,6 +24,7 @@ class ShellEngine(
     val entry = CarouselEntryTransition(spec)
     val exit = CarouselExitTransition(spec)
     val idle = CarouselIdleController()
+    val transition = PanelTransitionController()
     var selectedIndex = 0
         private set
     var cameraY = spec.cameraY
@@ -63,6 +65,9 @@ class ShellEngine(
     fun onFling(velocityX: Float) = commands.add(Command.Fling(velocityX))
     fun beginExitAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.Exit(tapX, surfaceWidth))
     fun beginAutoRotation() = commands.add(Command.AutoRotate)
+    fun beginPanelTransition(panel: Int, mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) = commands.add(Command.TransitionOpen(panel, mode))
+    fun onTextureUploaded() = commands.add(Command.TextureReady)
+    fun blocksInput(): Boolean = transition.blocksInput
 
     private fun applyVerticalDrag(dy: Float) {
         if (abs(dy) < .01f) return
@@ -84,6 +89,8 @@ class ShellEngine(
     }
     fun tick(dt: Float): Boolean {
         drainCommands()
+        transition.tick(dt)
+        if (transition.blocksInput) return true
         val entering = entry.tick(dt)
         if (entering) return true
         if (exit.active) return exit.tick(dt)
@@ -101,7 +108,7 @@ class ShellEngine(
     fun consumeExitCompleted() = exit.consumeCompleted()
     fun consumeAutoWakePending(): Boolean = autoWakePending.also { autoWakePending = false }
     /** GL-owner terminal cleanup; safe to call more than once. */
-    fun releaseEffects() { var index = 0; while (index < state.panels.size) { state.panels[index].effectStack.release(); state.panels[index].deformerStack.release(); index++ } }
+    fun releaseEffects() { transition.release(); var index = 0; while (index < state.panels.size) { state.panels[index].effectStack.release(); state.panels[index].deformerStack.release(); index++ } }
 
     private fun drainCommands() {
         while (true) {
@@ -115,6 +122,8 @@ class ShellEngine(
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
             is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
             is Command.Exit -> applyExit(command.tapX, command.width)
+            is Command.TransitionOpen -> transition.requestOpen(command.panel, command.mode)
+            Command.TextureReady -> transition.onTextureReady()
             Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
             }
         }
@@ -141,6 +150,8 @@ class ShellEngine(
         data object AutoRotate : Command
         data class Fling(val velocityX: Float) : Command
         data class Exit(val tapX: Float, val width: Float) : Command
+        data class TransitionOpen(val panel: Int, val mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) : Command
+        data object TextureReady : Command
     }
     companion object { const val AUTO_ROTATE_DELAY_MILLIS = 5_000L; private const val AUTO_ROTATE_DEGREES_PER_SECOND = 18f }
 }
