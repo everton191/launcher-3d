@@ -33,6 +33,8 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
         prepared = true; touchRadiusPx = 36f * context.density
         earth = graph.root.add(SceneNode("earth").apply {
             mesh = MeshFactory.uvSphere(28, 18, 1f)
+            // Mirror the complete geographic scene, including city children, to match the requested reading direction.
+            local.scaleX = -1f
             material = WidgetMaterial(textureRef = WorldTimeEarthTexture.ref)
         })
         earth.add(SceneNode("cloud-layer").apply {
