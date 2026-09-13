@@ -500,7 +500,7 @@ fun HomeScreen(homeRequestId: Int = 0, initialPanelId: String? = null) {
                         set(CarouselProgressKey, carouselProgress); set(LauncherModeKey, launcherMode.name)
                         set(PanelOrderKey, panels.joinToString("|") { it.id })
                         set(MagicActiveKey, magic)
-                    }.rotationGestures(enabled = !critical && launcherMode != LauncherMode.EDIT_ITEMS && launcherMode != LauncherMode.ORGANIZE,
+                    }.rotationGestures(enabled = !critical && launcherMode == LauncherMode.NORMAL,
                         onStart = { if (launcherMode == LauncherMode.NORMAL) motion?.cancel() else startRotation() },
                         onDrag = { if (launcherMode == LauncherMode.NORMAL) drag = (drag + it).coerceIn(-width, width) else rotation += it * carouselConfig.dragSensitivity },
                         onEnd = { if (launcherMode == LauncherMode.NORMAL) finishNormal(width, it) else finishRotation(it) }
@@ -638,7 +638,7 @@ fun HomeScreen(homeRequestId: Int = 0, initialPanelId: String? = null) {
                                     if (launcherMode == LauncherMode.EDIT_ITEMS) { launcherMode = LauncherMode.NORMAL; openCarousel() }
                                     else if (launcherMode == LauncherMode.NORMAL) openCarousel() else selectPanel(selectedPanelIndex)
                                 })
-                                .rotationGestures(enabled = !critical && launcherMode != LauncherMode.EDIT_ITEMS && launcherMode != LauncherMode.ORGANIZE, onStart = { startRotation() },
+                                .rotationGestures(enabled = !critical && launcherMode == LauncherMode.NORMAL, onStart = { startRotation() },
                                     onDrag = { rotation += it * carouselConfig.dragSensitivity }, onEnd = { finishRotation(it) }), contentAlignment = Alignment.Center) {
                                 androidx.compose.foundation.Image(painterResource(br.com.ne3d.spbshellmodern.R.drawable.spb_dock_handle), "Carrossel", Modifier.fillMaxWidth().height(62.dp), contentScale = ContentScale.Fit)
                             } else {

@@ -159,9 +159,6 @@ private class ShellPrototypeView(
         removeCallbacks(settleMeasurement)
         scheduler.activate(FrameReason.PHYSICS)
         scheduler.invalidateOnce()
-        // A touch move must reach GLSurfaceView in the same UI turn; the scheduler
-        // still owns subsequent frames for fling and snap.
-        requestRender()
         postDelayed(settleMeasurement, MEASUREMENT_WINDOW_MS)
     }, onTap = { x ->
         if (exitOnTap) {
