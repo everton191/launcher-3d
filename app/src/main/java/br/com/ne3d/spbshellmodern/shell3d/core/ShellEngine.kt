@@ -70,7 +70,8 @@ class ShellEngine(
     fun openPanelAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.OpenAt(tapX, surfaceWidth))
     fun beginAutoRotation() = commands.add(Command.AutoRotate)
     fun beginPanelTransition(panel: Int, mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) = commands.add(Command.TransitionOpen(panel, mode))
-    fun onTextureUploaded() = commands.add(Command.TextureReady)
+    /** Called by ShellRenderer on its owning GL thread after TextureManager.update completes. */
+    fun onTextureUploaded() { texturesReady = true; transition.onTextureReady() }
     fun blocksInput(): Boolean = transition.blocksInput
 
     private fun applyVerticalDrag(dy: Float) {
@@ -152,7 +153,6 @@ class ShellEngine(
             is Command.Exit -> applyExit(command.tapX, command.width)
             is Command.OpenAt -> openAt(command.tapX, command.width)
             is Command.TransitionOpen -> transition.requestOpen(command.panel, command.mode)
-            Command.TextureReady -> { texturesReady = true; transition.onTextureReady() }
             Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
             }
         }
@@ -181,7 +181,6 @@ class ShellEngine(
         data class Exit(val tapX: Float, val width: Float) : Command
         data class OpenAt(val tapX: Float, val width: Float) : Command
         data class TransitionOpen(val panel: Int, val mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) : Command
-        data object TextureReady : Command
     }
     companion object { const val AUTO_ROTATE_DELAY_MILLIS = 5_000L; private const val AUTO_ROTATE_DEGREES_PER_SECOND = 18f }
 }
