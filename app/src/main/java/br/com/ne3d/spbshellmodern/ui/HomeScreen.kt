@@ -66,7 +66,7 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(homeRequestId: Int = 0) {
+fun HomeScreen(homeRequestId: Int = 0, initialPanelId: String? = null) {
     val context = LocalContext.current
     val repository = remember { AppRepository(context) }
     val widgets = remember { WidgetRepository(context) }
@@ -116,6 +116,12 @@ fun HomeScreen(homeRequestId: Int = 0) {
     var rotation by remember { mutableFloatStateOf(targetRotationForPanel(selectedPanelIndex, panels.size)) }
     var carouselProgress by remember { mutableFloatStateOf(if (launcherMode == LauncherMode.NORMAL) 0f else 1f) }
     var critical by remember { mutableStateOf(false) }
+    LaunchedEffect(initialPanelId, panels) {
+        initialPanelId?.let { id ->
+            val index = panels.indexOfFirst { it.id == id }
+            if (index >= 0) { selectedPanelIndex = index; rotation = targetRotationForPanel(index, panels.size) }
+        }
+    }
     // A cancelled Compose animation must never leave the normal workspace unable
     // to receive another horizontal swipe.
     LaunchedEffect(critical, launcherMode) {

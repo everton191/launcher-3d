@@ -17,6 +17,7 @@ class MainActivity : ComponentActivity() {
     private var homeRequestId by mutableIntStateOf(0)
     private var shell3dPrototype by mutableStateOf(false)
     private var shell3dRealPanel by mutableStateOf(true)
+    private var prototypePanelId by mutableStateOf<String?>(null)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
@@ -28,11 +29,12 @@ class MainActivity : ComponentActivity() {
             if (shell3dPrototype) {
                 // The explicit prototype intent is also used for device validation.
                 // Its cards must therefore leave the overview just like HomeScreen's carousel.
-                ShellPrototypeScreen(initialPanels(), includeRealPanels = shell3dRealPanel, onExit = {
+                ShellPrototypeScreen(initialPanels(), includeRealPanels = shell3dRealPanel, onExit = { id ->
+                    prototypePanelId = id
                     shell3dPrototype = false
                 })
             }
-            else HomeScreen(homeRequestId)
+            else HomeScreen(homeRequestId, prototypePanelId)
         }
     }
 
