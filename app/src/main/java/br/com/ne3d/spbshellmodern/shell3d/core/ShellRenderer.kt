@@ -89,7 +89,12 @@ class ShellRenderer(
         val matrixStart = Debug.threadCpuTimeNanos()
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val exiting = engine.exit.active
-        camera.matrix(width, height, vp, if (exiting) engine.exit.fov else engine.entry.fov, if (exiting) engine.exit.cameraZ else engine.entry.cameraZ, if (exiting) engine.exit.cameraY else engine.cameraY)
+        if (widgetController?.scene?.id == "world-time") {
+            // Widget scenes own their framing; carousel camera motion stays untouched.
+            camera.matrix(width, height, vp, 42f, 7.5f, 0f, 0f)
+        } else {
+            camera.matrix(width, height, vp, if (exiting) engine.exit.fov else engine.entry.fov, if (exiting) engine.exit.cameraZ else engine.entry.cameraZ, if (exiting) engine.exit.cameraY else engine.cameraY)
+        }
         val matrixNanos = Debug.threadCpuTimeNanos() - matrixStart
         GLES30.glUseProgram(program); val position=positionLocation; val uv=uvLocation; val matrix=matrixLocation; val texture=textureLocation; val alpha=alphaLocation
         GLES30.glUniform1i(useTextureLocation, 1); GLES30.glUniform4f(colorLocation,1f,1f,1f,1f)

@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
     private var shell3dPrototype by mutableStateOf(false)
     private var shell3dRealPanel by mutableStateOf(true)
     private var shell3dDebugWidgetScene by mutableStateOf(false)
+    private var shell3dWorldTimeScene by mutableStateOf(false)
     private var prototypePanelId by mutableStateOf<String?>(null)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,10 +29,10 @@ class MainActivity : ComponentActivity() {
         applyLaunchIntent(intent)
         setContent {
             Log.i("Shell3D.Capture", "prototype=$shell3dPrototype realPanel=$shell3dRealPanel")
-            if (shell3dPrototype || shell3dDebugWidgetScene) {
+            if (shell3dPrototype || shell3dDebugWidgetScene || shell3dWorldTimeScene) {
                 // The explicit prototype intent is also used for device validation.
                 // Its cards must therefore leave the overview just like HomeScreen's carousel.
-                ShellPrototypeScreen(initialPanels(), includeRealPanels = shell3dRealPanel, debugWidgetScene = shell3dDebugWidgetScene, onExit = { id ->
+                ShellPrototypeScreen(initialPanels(), includeRealPanels = shell3dRealPanel, debugWidgetScene = shell3dDebugWidgetScene, worldTimeWidgetScene = shell3dWorldTimeScene, onExit = { id ->
                     prototypePanelId = id
                     shell3dPrototype = false
                 })
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
         shell3dPrototype = intent.getBooleanExtra(EXTRA_SHELL3D_PROTOTYPE, false)
         shell3dRealPanel = intent.getBooleanExtra(EXTRA_SHELL3D_REAL_PANEL, true)
         shell3dDebugWidgetScene = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_SHELL3D_DEBUG_WIDGET_SCENE, false)
+        shell3dWorldTimeScene = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_SHELL3D_WORLD_TIME_SCENE, false)
         if (BuildConfig.DEBUG) PanelEffectDebug.select(intent.getStringExtra(EXTRA_SHELL3D_EFFECT)) else PanelEffectDebug.select(null)
     }
 }
@@ -59,3 +61,4 @@ const val EXTRA_SHELL3D_PROTOTYPE = "br.com.ne3d.spbshellmodern.extra.SHELL3D_PR
 const val EXTRA_SHELL3D_REAL_PANEL = "br.com.ne3d.spbshellmodern.extra.SHELL3D_REAL_PANEL"
 const val EXTRA_SHELL3D_EFFECT = "shell3d_effect"
 const val EXTRA_SHELL3D_DEBUG_WIDGET_SCENE = "br.com.ne3d.spbshellmodern.extra.SHELL3D_DEBUG_WIDGET_SCENE"
+const val EXTRA_SHELL3D_WORLD_TIME_SCENE = "br.com.ne3d.spbshellmodern.extra.SHELL3D_WORLD_TIME_SCENE"

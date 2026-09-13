@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import br.com.ne3d.spbshellmodern.model.*
+import br.com.ne3d.spbshellmodern.shell3d.ShellPrototypeScreen
 
 @Composable
 fun LauncherPanel(
@@ -77,7 +78,21 @@ fun LauncherPanel(
                     }
                 }
                 PanelType.CLOCK -> SpbClockCard(panel.id, presentation, renderState, enabled)
-                PanelType.WORLD_TIME -> SpbWorldTimeCard(panel.id, presentation, renderState, enabled)
+                PanelType.WORLD_TIME -> if (
+                    enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL &&
+                    renderState == WidgetRenderState.NORMAL_2D
+                ) {
+                    ShellPrototypeScreen(
+                        panels = emptyList(),
+                        includeRealPanels = false,
+                        exitOnTap = false,
+                        worldTimeWidgetScene = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    // The carousel keeps a lightweight Compose preview; the open panel owns the GL scene.
+                    SpbWorldTimeCard(panel.id, presentation, renderState, enabled)
+                }
                 PanelType.MOON -> SpbMoonCard(presentation, renderState, enabled)
                 PanelType.PHOTOS, PanelType.GALLERY, PanelType.PICTURE -> SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
                 PanelType.WEATHER, PanelType.WEATHER_CURRENT, PanelType.WEATHER_GRAPH -> SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, panel.type == PanelType.WEATHER_GRAPH, renderState, presentation, enabled)

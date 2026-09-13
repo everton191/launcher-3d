@@ -6,8 +6,12 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.opengl.GLSurfaceView
 import android.view.View
+import android.view.MotionEvent
 import android.view.Choreographer
 import android.widget.FrameLayout
+import android.widget.TextView
+import android.view.Gravity
+import android.graphics.Color
 import android.util.Log
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -38,6 +42,13 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneController
 import br.com.ne3d.spbshellmodern.shell3d.widgets.debug.DebugWidgetScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.debug.DebugWidgetDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.interaction.WidgetInteraction
+import br.com.ne3d.spbshellmodern.shell3d.widgets.data.WidgetDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.data.WidgetSnapshot
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeSnapshot
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeCities
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WidgetIds
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -47,12 +58,13 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.interaction.WidgetInteraction
     exitOnTap: Boolean = true,
     gesturesEnabled: Boolean = true,
     debugWidgetScene: Boolean = false,
+    worldTimeWidgetScene: Boolean = false,
     onExit: (String) -> Unit = {},
     modifier: Modifier = Modifier,
-) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene) {
+) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene) {
     val lifecycleOwner = LocalLifecycleOwner.current
     AndroidView(
-        factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, onExit) },
+        factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, onExit) },
         update = { it.onExit = onExit; it.bindLifecycle(lifecycleOwner) },
         modifier = modifier,
     )
@@ -66,23 +78,37 @@ private class ShellPrototypeContainer(
     exitOnTap: Boolean,
     gesturesEnabled: Boolean,
     debugWidgetScene: Boolean,
+    worldTimeWidgetScene: Boolean,
     var onExit: (String) -> Unit,
 ) : FrameLayout(context) {
-    private val hasRealSnapshots = includeRealPanels && !debugWidgetScene
+    private val hasRealSnapshots = includeRealPanels && !debugWidgetScene && !worldTimeWidgetScene
     private var captureRequested = false
     private val workspacePanels = panels.ifEmpty { listOf(panelTemplate(PanelType.HOME)) }
     private val pendingTextures = workspacePanels.map { ShellRenderer.PendingTexture(it.id, AtomicReference<Bitmap?>(null)) }.toTypedArray()
-    private val debugScene: WidgetScene? = if (debugWidgetScene) WidgetSceneRegistry().apply {
+    private val widgetScene: WidgetScene? = if (debugWidgetScene) WidgetSceneRegistry().apply {
         register(WidgetSceneRegistry.DEBUG_SCENE) { DebugWidgetScene() }
-    }.create(WidgetSceneRegistry.DEBUG_SCENE) else null
+    }.create(WidgetSceneRegistry.DEBUG_SCENE) else if (worldTimeWidgetScene) WidgetSceneRegistry.production().create(WidgetIds.WORLD_TIME) else null
     private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null
+    private val worldTimeDataSource: WorldTimeDataSource? = if (worldTimeWidgetScene) WorldTimeDataSource().also { it.publishNow() } else null
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
-        if (debugWidgetScene) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
-        debugScene,
+        if (debugWidgetScene || worldTimeWidgetScene) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
+        widgetScene,
+        widgetDataSource,
         debugDataSource,
+        worldTimeDataSource,
+        { snapshot -> updateWorldTimeInfo(snapshot) },
         workspacePanels.indexOfFirst { it.id == selectedPanelId }.coerceAtLeast(0)) {
             index -> onExit(workspacePanels.getOrNull(index)?.id ?: workspacePanels.first().id)
         }
+    private val worldTimeInfo: TextView? = if (worldTimeWidgetScene) TextView(context).apply {
+        setTextColor(Color.WHITE)
+        textSize = 18f
+        setShadowLayer(6f, 0f, 2f, Color.BLACK)
+        gravity = Gravity.CENTER
+        setPadding(24, 18, 24, 28)
+        updateWorldTimeInfo(worldTimeDataSource?.latest())
+    } else null
     private val captures = workspacePanels.map(::snapshot)
     private var lifecycleOwner: LifecycleOwner? = null
     private val lifecycleObserver = object : DefaultLifecycleObserver {
@@ -93,6 +119,7 @@ private class ShellPrototypeContainer(
     init {
         Log.i("Shell3D.Capture", "container panels=${workspacePanels.size}")
         addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        worldTimeInfo?.let { addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)) }
         if (hasRealSnapshots) {
             for (capture in captures) addView(capture.view, LayoutParams(PanelSnapshotCapture.WIDTH, PanelSnapshotCapture.HEIGHT))
             surface.onSurfaceReady = { captureRequested = false; requestCaptureAfterLayout() }
@@ -119,6 +146,11 @@ private class ShellPrototypeContainer(
         lifecycleOwner = null
         super.onDetachedFromWindow()
     }
+    private fun updateWorldTimeInfo(snapshot: WorldTimeSnapshot?) {
+        val value = snapshot?.selectedValue() ?: return
+        val city = WorldTimeCities.defaults.firstOrNull { it.id == value.id } ?: return
+        worldTimeInfo?.text = "${city.displayName}  ${value.time}  ${value.offset}"
+    }
     private fun snapshot(panel: LauncherPanel): SnapshotHolder {
         val view = ComposeView(context).apply {
             setContent { MaterialTheme { LauncherPanel(panel, emptyList(), interactive = false, onLaunch = {}) } }
@@ -138,7 +170,10 @@ private class ShellPrototypeView(
     gesturesEnabled: Boolean,
     panels: List<Panel3D>,
     private val widgetScene: WidgetScene?,
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>?,
     private val debugDataSource: DebugWidgetDataSource?,
+    private val worldTimeDataSource: WorldTimeDataSource?,
+    private val onWorldTimeSnapshot: (WorldTimeSnapshot?) -> Unit,
     initialSelectedIndex: Int,
     private val onExit: (Int) -> Unit,
 ) : GLSurfaceView(context) {
@@ -150,8 +185,19 @@ private class ShellPrototypeView(
         }
     private val engine = ShellEngine(includeRealSnapshots = includeRealPanels, panels = panels, initialSelectedIndex = initialSelectedIndex)
     private val scheduler = FrameScheduler(Choreographer.getInstance()) { requestRender() }
-    private val widgetController = widgetScene?.let { scene -> WidgetSceneController(scene, debugDataSource ?: error("Debug scene requires its data source"), { post { scheduler.invalidateOnce() } }) { active -> post { if(active) scheduler.activate(FrameReason.WIDGET_ANIMATION) else scheduler.deactivate(FrameReason.WIDGET_ANIMATION) } } }
+    private val widgetController = widgetScene?.let { scene -> WidgetSceneController(scene, widgetDataSource ?: error("Widget scene requires a data source"), { post { scheduler.invalidateOnce() } }) { active -> post { if(active) scheduler.activate(FrameReason.WIDGET_ANIMATION) else scheduler.deactivate(FrameReason.WIDGET_ANIMATION) } } }
     private val renderConsumed = Runnable { scheduler.onRenderConsumed() }
+    private var worldDownX = 0f
+    private var worldLastX = 0f
+    private var worldMoved = false
+    private val worldClockRefresh = object : Runnable {
+        override fun run() {
+            worldTimeDataSource?.publishNow()
+            onWorldTimeSnapshot(worldTimeDataSource?.latest())
+            widgetController?.onSnapshotPublished()
+            postDelayed(this, WORLD_CLOCK_REFRESH_MILLIS)
+        }
+    }
     private val settleMeasurement = Runnable {
         queueEvent { renderer.publishMeasurement("input-30s") }
     }
@@ -182,7 +228,15 @@ private class ShellPrototypeView(
         if (widgetScene != null) {
             val localX = (x / width.coerceAtLeast(1).toFloat() - .5f) * 3f
             widgetController?.enqueue { widgetScene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f)) }
-            if (localX >= .6f) { debugDataSource?.advance(); widgetController?.onSnapshotPublished() } else widgetController?.onSnapshotPublished()
+            if (localX >= .6f) debugDataSource?.advance()
+            worldTimeDataSource?.let { source ->
+                val cityIndex = ((x / width.coerceAtLeast(1).toFloat()) * WorldTimeCities.defaults.size)
+                    .toInt().coerceIn(0, WorldTimeCities.defaults.lastIndex)
+                val city = WorldTimeCities.defaults[cityIndex]
+                source.select(city.id)
+                widgetController?.enqueue { (widgetScene as? WorldTimeScene)?.select(city.id) }
+            }
+            widgetController?.onSnapshotPublished()
         } else if (exitOnTap) {
             engine.beginExitForPanel(engine.panelIndexAt(x, width.toFloat()))
             scheduler.activate(FrameReason.TRANSITION)
@@ -195,20 +249,76 @@ private class ShellPrototypeView(
     }, onGestureFinished = { scheduler.deactivate(FrameReason.INPUT) })
     init {
         setEGLContextClientVersion(3); setRenderer(renderer); renderMode = RENDERMODE_WHEN_DIRTY
-        if (gesturesEnabled) setOnTouchListener { _: View, event -> gestures.onTouch(event) }
-        else { isClickable = false; isFocusable = false }
+        if (worldTimeDataSource != null) {
+            setOnTouchListener { _, event -> onWorldTimeTouch(event) }
+            post(worldClockRefresh)
+        } else if (gesturesEnabled) {
+            setOnTouchListener { _: View, event -> gestures.onTouch(event) }
+        } else { isClickable = false; isFocusable = false }
         if (engine.entry.active) scheduler.activate(FrameReason.TRANSITION)
         scheduler.invalidateOnce()
     }
     fun onTextureAvailable() { scheduler.activate(FrameReason.TEXTURE_UPLOAD); scheduler.invalidateOnce() }
-    fun pauseRenderer() { widgetController?.pause(); scheduler.pause(); super.onPause() }
+    fun pauseRenderer() {
+        removeCallbacks(worldClockRefresh)
+        widgetController?.pause()
+        scheduler.pause()
+        super.onPause()
+    }
     fun resumeRenderer() {
         super.onResume()
         widgetController?.resume()
+        if (worldTimeDataSource != null) post(worldClockRefresh)
         scheduler.resume()
         if (engine.entry.active || engine.exit.active) scheduler.activate(FrameReason.TRANSITION) else scheduler.invalidateOnce()
     }
-    fun stopRenderer() { scheduler.shutdown(); queueEvent { renderer.release() } }
+    fun stopRenderer() {
+        removeCallbacks(worldClockRefresh)
+        scheduler.shutdown()
+        queueEvent { renderer.release() }
+    }
+    private fun onWorldTimeTouch(event: MotionEvent): Boolean {
+        val scene = widgetScene as? WorldTimeScene ?: return false
+        val localX = (event.x / width.coerceAtLeast(1).toFloat() - .5f) * 3f
+        return when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                worldDownX = event.x
+                worldLastX = event.x
+                worldMoved = false
+                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragStart(localX, 0f)) }
+                true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val delta = event.x - worldLastX
+                if (kotlin.math.abs(event.x - worldDownX) > TOUCH_SLOP_PX) worldMoved = true
+                worldLastX = event.x
+                widgetController?.enqueue { scene.drag(delta) }
+                widgetController?.onSnapshotPublished()
+                true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!worldMoved) {
+                    val cityIndex = ((event.x / width.coerceAtLeast(1).toFloat()) * WorldTimeCities.defaults.size)
+                        .toInt().coerceIn(0, WorldTimeCities.defaults.lastIndex)
+                    val city = WorldTimeCities.defaults[cityIndex]
+                    worldTimeDataSource?.select(city.id)
+                    onWorldTimeSnapshot(worldTimeDataSource?.latest())
+                    widgetController?.enqueue {
+                        scene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f))
+                        scene.select(city.id)
+                    }
+                }
+                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragEnd) }
+                widgetController?.onSnapshotPublished()
+                true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                widgetController?.enqueue { scene.interactions.dispatch(WidgetInteraction.DragEnd) }
+                true
+            }
+            else -> false
+        }
+    }
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         // Reserve the edge strips for horizontal carousel rotation. Without this,
@@ -217,5 +327,9 @@ private class ShellPrototypeView(
         if (edge > 0) systemGestureExclusionRects = listOf(Rect(0, 0, edge, h), Rect(w - edge, 0, w, h))
     }
     override fun onDetachedFromWindow() { stopRenderer(); super.onDetachedFromWindow() }
-    private companion object { const val MEASUREMENT_WINDOW_MS = 30_000L }
+    private companion object {
+        const val MEASUREMENT_WINDOW_MS = 30_000L
+        const val WORLD_CLOCK_REFRESH_MILLIS = 60_000L
+        const val TOUCH_SLOP_PX = 12f
+    }
 }
