@@ -8,8 +8,6 @@ import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectDebug
 import br.com.ne3d.spbshellmodern.shell3d.effects.configureEffect
-import br.com.ne3d.spbshellmodern.shell3d.effects.PanelTransitionController
-import kotlin.math.roundToInt
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.math.PI
@@ -26,16 +24,12 @@ class ShellEngine(
     val entry = CarouselEntryTransition(spec)
     val exit = CarouselExitTransition(spec)
     val idle = CarouselIdleController()
-    val transition = PanelTransitionController()
     var selectedIndex = 0
         private set
     var cameraY = spec.cameraY
         private set
     private var autoRotationRequested = false
     private var autoWakePending = false
-    private var pendingOpenPanelIndex: Int? = null
-    private var panelOpenReady = false
-    private var texturesReady = false
     private val commands = ConcurrentLinkedQueue<Command>()
     private val effectContext: EffectContext
     private val pendingDxBits = AtomicInteger(0)
@@ -58,7 +52,7 @@ class ShellEngine(
         while (index < state.panels.size) {
             state.panels[index].effectStack.prepare(effectContext)
             state.panels[index].deformerStack.prepare(effectContext)
-            state.panels[index].configureEffect(PanelEffectDebug.mode)
+            state.panels[index].configureEffect(br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode.NONE)
             index++
         }
     }
@@ -82,67 +76,26 @@ class ShellEngine(
         return bestIndex
     }
     fun beginAutoRotation() = commands.add(Command.AutoRotate)
-    fun beginPanelTransition(panel: Int, mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) = commands.add(Command.TransitionOpen(panel, mode))
-    /** Called by ShellRenderer on its owning GL thread after TextureManager.update completes. */
-    fun onTextureUploaded() { texturesReady = true; transition.onTextureReady() }
-    fun blocksInput(): Boolean = transition.blocksInput
+    fun blocksInput(): Boolean = exit.active
 
     private fun applyVerticalDrag(dy: Float) {
         if (abs(dy) < .01f) return
         cameraY = (cameraY + dy * spec.verticalDragToCameraY).coerceIn(spec.minimumCameraY, spec.maximumCameraY)
     }
-    private fun applyExit(tapX: Float, surfaceWidth: Float) {
-        if (entry.active || exit.active) return
-        val step = 360f / state.panels.size
-        val centeredIndex = ((-carousel.angle / step).roundToInt() % state.panels.size + state.panels.size) % state.panels.size
-        // A short tap chooses the face under the left, centre, or right third of the ring.
-        // A held touch never arrives here; it remains a carousel gesture.
-        val offset = when {
-            tapX < surfaceWidth * .34f -> -1
-            tapX > surfaceWidth * .66f -> 1
-            else -> 0
-        }
-        selectedIndex = (centeredIndex + offset).mod(state.panels.size)
-        exit.begin()
-    }
     private fun applyExitForPanel(index: Int) {
         if (entry.active || exit.active || state.panels.isEmpty()) return
         selectedIndex = index.coerceIn(state.panels.indices)
+        state.panels[selectedIndex].configureEffect(PanelEffectDebug.mode)
         exit.begin()
-    }
-    private fun openAt(tapX: Float, surfaceWidth: Float) {
-        if (state.panels.isEmpty() || pendingOpenPanelIndex != null || transition.blocksInput) return
-        val targetX = (tapX / surfaceWidth.coerceAtLeast(1f) - .5f) * 2f
-        var bestIndex = 0; var bestDistance = Float.MAX_VALUE
-        val step = 360f / state.panels.size
-        state.panels.indices.forEach { index ->
-            val angle = index * step + carousel.angle
-            val projectedX = sin(angle * PI / 180.0).toFloat()
-            val distance = abs(projectedX - targetX)
-            if (distance < bestDistance) { bestDistance = distance; bestIndex = index }
-        }
-        pendingOpenPanelIndex = bestIndex
-        carousel.snapToIndex(bestIndex, state.panels.size)
-    }
-    private fun startPendingOpen() {
-        val index = pendingOpenPanelIndex ?: return
-        pendingOpenPanelIndex = null
-        selectedIndex = index
-        // A launcher card represents a full workspace page. The host owns that page;
-        // opening it is deliberately separate from the legacy carousel exit animation.
-        panelOpenReady = true
     }
     fun tick(dt: Float): Boolean {
         drainCommands()
-        transition.tick(dt)
-        if (transition.blocksInput) return true
         val entering = entry.tick(dt)
         if (entering) return true
         if (exit.active) return exit.tick(dt)
         if (carousel.dragging) return true
         val settling = carousel.tick(dt, state.panels.size)
         if (settling) return true
-        if (pendingOpenPanelIndex != null) { startPendingOpen(); return true }
         if (autoRotationRequested) {
             carousel.autoRotate(dt * AUTO_ROTATE_DEGREES_PER_SECOND)
             return true
@@ -152,11 +105,9 @@ class ShellEngine(
         return false
     }
     fun consumeExitCompleted() = exit.consumeCompleted()
-    fun consumePanelOpenReady(): Boolean = panelOpenReady.also { panelOpenReady = false }
-    fun consumeComposeReady() = transition.consumeComposeReady()
     fun consumeAutoWakePending(): Boolean = autoWakePending.also { autoWakePending = false }
     /** GL-owner terminal cleanup; safe to call more than once. */
-    fun releaseEffects() { transition.release(); var index = 0; while (index < state.panels.size) { state.panels[index].effectStack.release(); state.panels[index].deformerStack.release(); index++ } }
+    fun releaseEffects() { var index = 0; while (index < state.panels.size) { state.panels[index].effectStack.release(); state.panels[index].deformerStack.release(); index++ } }
 
     private fun drainCommands() {
         while (true) {
@@ -169,9 +120,7 @@ class ShellEngine(
             Command.GestureStart -> Unit
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
             is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
-            is Command.Exit -> applyExit(command.tapX, command.width)
             is Command.ExitPanel -> applyExitForPanel(command.index)
-            is Command.TransitionOpen -> transition.requestOpen(command.panel, command.mode)
             Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
             }
         }
@@ -197,9 +146,7 @@ class ShellEngine(
         data object GestureEnd : Command
         data object AutoRotate : Command
         data class Fling(val velocityX: Float) : Command
-        data class Exit(val tapX: Float, val width: Float) : Command
         data class ExitPanel(val index: Int) : Command
-        data class TransitionOpen(val panel: Int, val mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) : Command
     }
     companion object { const val AUTO_ROTATE_DELAY_MILLIS = 5_000L; private const val AUTO_ROTATE_DEGREES_PER_SECOND = 18f }
 }

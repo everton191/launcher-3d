@@ -78,7 +78,7 @@ class ShellRenderer(
                 bitmap.recycle()
             }
         }
-        if (uploadedTexture && pendingTextures.none { it.bitmap.get() != null }) { engine.onTextureUploaded(); onTextureUploadsDrained() }
+        if (uploadedTexture && pendingTextures.none { it.bitmap.get() != null }) onTextureUploadsDrained()
         val textureNanos = Debug.threadCpuTimeNanos() - textureStart
         val matrixStart = Debug.threadCpuTimeNanos()
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
@@ -106,9 +106,9 @@ class ShellRenderer(
             effectInput.selectedIndex = engine.selectedIndex
             effectInput.angle = panelTransform.angle
             effectInput.velocity = engine.carousel.velocity
-            effectInput.progress = if (engine.transition.selectedPanel == index) engine.transition.progress else 0f
-            effectInput.direction = engine.transition.direction
-            effectInput.phase = engine.transition.phase
+            effectInput.progress = if (exiting && index == engine.selectedIndex) engine.exit.progress else 0f
+            effectInput.direction = 1f
+            effectInput.phase = if (exiting && index == engine.selectedIndex) br.com.ne3d.spbshellmodern.shell3d.effects.EffectPhase.CLOSING else br.com.ne3d.spbshellmodern.shell3d.effects.EffectPhase.NONE
             panel.effectStack.apply(panel, effectInput)
             if (panel.deformerStack.isEmpty()) panel.resetRenderMesh() else panel.deformerStack.apply(panel, effectInput)
             layoutNanos += Debug.threadCpuTimeNanos() - layoutStart
@@ -138,7 +138,7 @@ class ShellRenderer(
         GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         val drawNanos = Debug.threadCpuTimeNanos() - drawStart
         metrics.record(now, Debug.threadCpuTimeNanos() - frameCpuStart, animationNanos, physicsNanos, layoutNanos, matrixNanos + panelMatrixNanos, drawNanos, textureNanos, drawn, drawn)
-        if (engine.consumeExitCompleted() || engine.consumeComposeReady() || engine.consumePanelOpenReady()) onExitFinished()
+        if (engine.consumeExitCompleted()) onExitFinished()
         if (engine.consumeAutoWakePending()) onAutoWakeNeeded()
         if (!active) onEngineIdle()
         onFrameDrawn()
