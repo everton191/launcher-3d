@@ -53,6 +53,7 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WidgetIds
 import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeClockSchedule
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetIds
+import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicDataSource
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
 @Composable fun ShellPrototypeScreen(
@@ -108,7 +109,8 @@ private class ShellPrototypeContainer(
     private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null
     private val worldTimeDataSource: WorldTimeDataSource? = if (sceneType == WidgetSceneType.WORLD_TIME) WorldTimeDataSource().also { it.publishNow() } else null
     private val weatherDataSource: WeatherWidgetDataSource? = if (sceneType == WidgetSceneType.WEATHER) WeatherWidgetDataSource().also { it.publishWeather(weatherInfo) } else null
-    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource
+    private val musicDataSource: MusicDataSource? = if (sceneType == WidgetSceneType.MUSIC) MusicDataSource().also { it.publishState(false) } else null
+    private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>? = debugDataSource ?: worldTimeDataSource ?: weatherDataSource ?: musicDataSource
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
         if (debugWidgetScene || sceneType != null) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
         widgetScene,

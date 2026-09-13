@@ -100,6 +100,9 @@ fun LauncherPanel(
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.WEATHER, weatherInfo = weather, modifier = Modifier.fillMaxSize())
                 } else SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, false, renderState, presentation, enabled)
                 PanelType.WEATHER_CURRENT, PanelType.WEATHER_GRAPH -> SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, panel.type == PanelType.WEATHER_GRAPH, renderState, presentation, enabled)
+                PanelType.MEDIA -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.MUSIC, modifier = Modifier.fillMaxSize())
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
                 PanelType.ANDROID_WIDGET -> SpbAndroidWidget(panel.id, enabled)
                 else -> SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
             }
