@@ -162,9 +162,8 @@ private class ShellPrototypeView(
         postDelayed(settleMeasurement, MEASUREMENT_WINDOW_MS)
     }, onTap = { x ->
         if (exitOnTap) {
-            engine.openPanelAt(x, width.toFloat())
-            scheduler.activate(FrameReason.TRANSITION)
-            scheduler.invalidateOnce()
+            // A card is a launcher page: leave the ring and show that page full-screen.
+            onExit(engine.panelIndexAt(x, width.toFloat()))
         }
     }, onGestureStarted = {
         scheduler.cancelDelayedWake()

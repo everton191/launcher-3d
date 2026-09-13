@@ -69,6 +69,18 @@ class ShellEngine(
     fun onVerticalDrag(dy: Float) = accumulate(pendingDyBits, dy)
     fun onFling(velocityX: Float) = commands.add(Command.Fling(velocityX))
     fun openPanelAt(tapX: Float, surfaceWidth: Float) = commands.add(Command.OpenAt(tapX, surfaceWidth))
+    fun panelIndexAt(tapX: Float, surfaceWidth: Float): Int {
+        if (state.panels.isEmpty()) return 0
+        val targetX = (tapX / surfaceWidth.coerceAtLeast(1f) - .5f) * 2f
+        var bestIndex = 0; var bestDistance = Float.MAX_VALUE
+        val step = 360f / state.panels.size
+        state.panels.indices.forEach { index ->
+            val projectedX = sin((index * step + carousel.angle) * PI / 180.0).toFloat()
+            val distance = abs(projectedX - targetX)
+            if (distance < bestDistance) { bestDistance = distance; bestIndex = index }
+        }
+        return bestIndex
+    }
     fun beginAutoRotation() = commands.add(Command.AutoRotate)
     fun beginPanelTransition(panel: Int, mode: br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectMode) = commands.add(Command.TransitionOpen(panel, mode))
     /** Called by ShellRenderer on its owning GL thread after TextureManager.update completes. */
