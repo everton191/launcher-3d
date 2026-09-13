@@ -34,7 +34,9 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneRegistry
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneController
 import br.com.ne3d.spbshellmodern.shell3d.widgets.debug.DebugWidgetScene
+import br.com.ne3d.spbshellmodern.shell3d.widgets.debug.DebugWidgetDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.interaction.WidgetInteraction
 
 /** GLES carousel fed with the current launcher workspace. Hidden Compose views provide live panel textures. */
@@ -73,9 +75,11 @@ private class ShellPrototypeContainer(
     private val debugScene: WidgetScene? = if (debugWidgetScene) WidgetSceneRegistry().apply {
         register(WidgetSceneRegistry.DEBUG_SCENE) { DebugWidgetScene() }
     }.create(WidgetSceneRegistry.DEBUG_SCENE) else null
+    private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null
     private val surface = ShellPrototypeView(context, pendingTextures, includeRealPanels, exitOnTap && !debugWidgetScene, gesturesEnabled,
         if (debugWidgetScene) emptyList() else workspacePanels.map { Panel3D(it.id, it.title, 0xFF36595D.toInt(), PanelTextureKind.REAL_SNAPSHOT) },
         debugScene,
+        debugDataSource,
         workspacePanels.indexOfFirst { it.id == selectedPanelId }.coerceAtLeast(0)) {
             index -> onExit(workspacePanels.getOrNull(index)?.id ?: workspacePanels.first().id)
         }
@@ -134,6 +138,7 @@ private class ShellPrototypeView(
     gesturesEnabled: Boolean,
     panels: List<Panel3D>,
     private val widgetScene: WidgetScene?,
+    private val debugDataSource: DebugWidgetDataSource?,
     initialSelectedIndex: Int,
     private val onExit: (Int) -> Unit,
 ) : GLSurfaceView(context) {
@@ -145,6 +150,7 @@ private class ShellPrototypeView(
         }
     private val engine = ShellEngine(includeRealSnapshots = includeRealPanels, panels = panels, initialSelectedIndex = initialSelectedIndex)
     private val scheduler = FrameScheduler(Choreographer.getInstance()) { requestRender() }
+    private val widgetController = widgetScene?.let { scene -> WidgetSceneController(scene, debugDataSource ?: error("Debug scene requires its data source"), { post { scheduler.invalidateOnce() } }) { active -> post { if(active) scheduler.activate(FrameReason.WIDGET_ANIMATION) else scheduler.deactivate(FrameReason.WIDGET_ANIMATION) } } }
     private val renderConsumed = Runnable { scheduler.onRenderConsumed() }
     private val settleMeasurement = Runnable {
         queueEvent { renderer.publishMeasurement("input-30s") }
@@ -165,8 +171,7 @@ private class ShellPrototypeView(
         onExitFinished = { post { onExit(engine.selectedIndex) } },
         onTextureUploadsDrained = { post { scheduler.deactivate(FrameReason.TEXTURE_UPLOAD) } },
         pendingTextures = pendingTextures,
-        widgetScene = widgetScene,
-        onWidgetAnimationChanged = { active -> post { if(active) scheduler.activate(FrameReason.WIDGET_ANIMATION) else scheduler.deactivate(FrameReason.WIDGET_ANIMATION) } },
+        widgetController = widgetController,
     )
     private val gestures = GestureController(engine, {
         removeCallbacks(settleMeasurement)
@@ -176,8 +181,8 @@ private class ShellPrototypeView(
     }, onTap = { x ->
         if (widgetScene != null) {
             val localX = (x / width.coerceAtLeast(1).toFloat() - .5f) * 3f
-            widgetScene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f))
-            scheduler.activate(FrameReason.WIDGET_ANIMATION); scheduler.invalidateOnce()
+            widgetController?.enqueue { widgetScene.interactions.dispatch(WidgetInteraction.Tap(localX, 0f)) }
+            if (localX >= .6f) { debugDataSource?.advance(); widgetController?.onSnapshotPublished() } else widgetController?.onSnapshotPublished()
         } else if (exitOnTap) {
             engine.beginExitForPanel(engine.panelIndexAt(x, width.toFloat()))
             scheduler.activate(FrameReason.TRANSITION)
@@ -196,9 +201,10 @@ private class ShellPrototypeView(
         scheduler.invalidateOnce()
     }
     fun onTextureAvailable() { scheduler.activate(FrameReason.TEXTURE_UPLOAD); scheduler.invalidateOnce() }
-    fun pauseRenderer() { scheduler.pause(); super.onPause() }
+    fun pauseRenderer() { widgetController?.pause(); scheduler.pause(); super.onPause() }
     fun resumeRenderer() {
         super.onResume()
+        widgetController?.resume()
         scheduler.resume()
         if (engine.entry.active || engine.exit.active) scheduler.activate(FrameReason.TRANSITION) else scheduler.invalidateOnce()
     }
