@@ -95,7 +95,7 @@ fun LauncherPanel(
                     SpbWorldTimeCard(panel.id, presentation, renderState, enabled)
                 }
                 PanelType.MOON -> SpbMoonCard(presentation, renderState, enabled)
-                PanelType.PHOTOS, PanelType.GALLERY, PanelType.PICTURE -> SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
+                PanelType.GALLERY, PanelType.PICTURE -> SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
                 PanelType.WEATHER -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.WEATHER, weatherInfo = weather, modifier = Modifier.fillMaxSize())
                 } else SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, false, renderState, presentation, enabled)
@@ -106,6 +106,9 @@ fun LauncherPanel(
                 PanelType.CALENDAR -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.CALENDAR, modifier = Modifier.fillMaxSize())
                 } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
+                PanelType.PHOTOS -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.PHOTOS, modifier = Modifier.fillMaxSize())
+                } else SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
                 PanelType.ANDROID_WIDGET -> SpbAndroidWidget(panel.id, enabled)
                 else -> SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
             }
@@ -128,3 +131,4 @@ private fun AppsGrid(apps: List<AppItem>, interactive: Boolean, onLaunch: (AppIt
         }
     }
 }
+
