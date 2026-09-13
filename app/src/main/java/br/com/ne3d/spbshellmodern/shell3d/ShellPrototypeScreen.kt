@@ -54,6 +54,8 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime.WorldTimeClockSchedu
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetIds
 import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicDataSource
+import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicSessionRepository
+import br.com.ne3d.spbshellmodern.shell3d.widgets.music.MusicScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.CalendarDataSource
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PersonalWidgetRepository
 import br.com.ne3d.spbshellmodern.shell3d.widgets.personal.PhotosDataSource
@@ -115,7 +117,7 @@ private class ShellPrototypeContainer(
     }.create(WidgetSceneRegistry.DEBUG_SCENE) else when (sceneType) {
         WidgetSceneType.WORLD_TIME -> WidgetSceneRegistry.production().create(WidgetIds.WORLD_TIME)
         WidgetSceneType.WEATHER -> WidgetSceneRegistry.production().create(WeatherWidgetIds.WEATHER)
-        WidgetSceneType.MUSIC -> WidgetSceneRegistry.production().create("music")
+        WidgetSceneType.MUSIC -> MusicScene { action -> post { when (action) { MusicScene.Action.PREVIOUS -> musicRepository?.previous(); MusicScene.Action.TOGGLE -> musicRepository?.togglePlayPause(); MusicScene.Action.NEXT -> musicRepository?.next() } } }
         WidgetSceneType.CALENDAR -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CALENDAR)
         WidgetSceneType.PHOTOS -> PhotosScene(photosTextureStore ?: error("Photos texture store unavailable"))
         WidgetSceneType.CONTACTS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CONTACTS)
@@ -126,7 +128,8 @@ private class ShellPrototypeContainer(
     private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null
     private val worldTimeDataSource: WorldTimeDataSource? = if (sceneType == WidgetSceneType.WORLD_TIME) WorldTimeDataSource().also { it.publishNow() } else null
     private val weatherDataSource: WeatherWidgetDataSource? = if (sceneType == WidgetSceneType.WEATHER) WeatherWidgetDataSource().also { it.publishWeather(weatherInfo) } else null
-    private val musicDataSource: MusicDataSource? = if (sceneType == WidgetSceneType.MUSIC) MusicDataSource().also { it.publishState(false) } else null
+    private val musicDataSource: MusicDataSource? = if (sceneType == WidgetSceneType.MUSIC) MusicDataSource() else null
+    private val musicRepository: MusicSessionRepository? = if (sceneType == WidgetSceneType.MUSIC) MusicSessionRepository(context) else null
     private val calendarDataSource: CalendarDataSource? = if (sceneType == WidgetSceneType.CALENDAR) CalendarDataSource() else null
     private val photosDataSource: PhotosDataSource? = if (sceneType == WidgetSceneType.PHOTOS) PhotosDataSource() else null
     private val contactsDataSource: ContactsDataSource? = if (sceneType == WidgetSceneType.CONTACTS) ContactsDataSource() else null
@@ -156,7 +159,7 @@ private class ShellPrototypeContainer(
     private var lifecycleOwner: LifecycleOwner? = null
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onPause(owner: LifecycleOwner) = surface.pauseRenderer()
-        override fun onResume(owner: LifecycleOwner) { surface.resumeRenderer(); refreshSystem() }
+        override fun onResume(owner: LifecycleOwner) { surface.resumeRenderer(); refreshSystem(); musicRepository?.start(musicDataSource ?: return) }
         override fun onDestroy(owner: LifecycleOwner) = surface.stopRenderer()
     }
     init {
@@ -172,6 +175,7 @@ private class ShellPrototypeContainer(
         if (contactsDataSource != null) refreshContacts()
         notificationDataSource?.let { source -> if (NotificationAccess.isAuthorized(context)) NotificationBridge.register(source) else source.publishNotifications(false, emptyList()) }
         if (systemDataSource != null) refreshSystem()
+        musicRepository?.start(musicDataSource ?: error("Music source unavailable"))
     }
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
@@ -229,6 +233,7 @@ private class ShellPrototypeContainer(
         lifecycleOwner = null
         photosTextureStore?.release()
         notificationDataSource?.let(NotificationBridge::unregister)
+        musicRepository?.stop()
         super.onDetachedFromWindow()
     }
     private fun updateWorldTimeInfo(snapshot: WorldTimeSnapshot?) {
@@ -415,3 +420,5 @@ private class ShellPrototypeView(
         const val TOUCH_SLOP_PX = 12f
     }
 }
+
+
