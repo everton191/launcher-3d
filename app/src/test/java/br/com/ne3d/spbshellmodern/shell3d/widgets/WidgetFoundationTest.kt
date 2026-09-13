@@ -24,7 +24,7 @@ class WidgetFoundationTest {
         class Scene : WidgetScene { override val id="test"; override val graph=SceneGraph(); override val interactions=InteractionMap(); var active=false; var updateRevision=-1L; override fun prepare(context: WidgetSceneContext)=Unit; override fun update(snapshot: WidgetSnapshot){updateRevision=snapshot.revision}; override fun tick(dtSeconds:Float)=active; override fun pause()=Unit; override fun resume()=Unit; override fun release()=Unit }
         val source=LatestWidgetDataSource<Snapshot>(); val scene=Scene(); var invalidations=0; val states=ArrayList<Boolean>(); val controller=WidgetSceneController(scene,source,{invalidations++}){states.add(it)}
         controller.prepare(WidgetSceneContext(1f,1,1,{})); source.publish(Snapshot(1));source.publish(Snapshot(2));source.publish(Snapshot(3));controller.onSnapshotPublished();assertEquals(1,invalidations);controller.tick(0f);assertEquals(3,scene.updateRevision)
-        scene.active=true;controller.tick(.01f);assertEquals(listOf(true),states);controller.release();assertEquals(listOf(true,false),states)
+        scene.active=true;controller.tick(.01f);assertEquals(listOf(true),states);controller.release();controller.release();source.publish(Snapshot(4));controller.onSnapshotPublished();assertFalse(controller.tick(.01f));assertEquals(1,invalidations);assertEquals(listOf(true,false),states)
     }
     @Test fun `empty interaction does not start an animation`() { val map=InteractionMap();assertFalse(map.dispatch(WidgetInteraction.Tap(4f,4f))) }
 }
