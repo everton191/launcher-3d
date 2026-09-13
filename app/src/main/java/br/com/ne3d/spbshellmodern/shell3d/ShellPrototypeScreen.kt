@@ -119,7 +119,8 @@ private class ShellPrototypeContainer(
         WidgetSceneType.CALENDAR -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CALENDAR)
         WidgetSceneType.PHOTOS -> PhotosScene(photosTextureStore ?: error("Photos texture store unavailable"))
         WidgetSceneType.CONTACTS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.CONTACTS)
-        WidgetSceneType.NOTIFICATIONS, WidgetSceneType.SYSTEM -> null
+        WidgetSceneType.NOTIFICATIONS -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.NOTIFICATIONS)?.also { (it as? NotificationScene)?.onOpen = { key -> post { NotificationBridge.open(key) } } }
+        WidgetSceneType.SYSTEM -> WidgetSceneRegistry.production().create(WidgetSceneRegistry.SYSTEM)
         null -> null
     }
     private val debugDataSource: DebugWidgetDataSource? = if (debugWidgetScene) DebugWidgetDataSource() else null

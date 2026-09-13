@@ -112,6 +112,12 @@ fun LauncherPanel(
                 PanelType.PHOTOS -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.PHOTOS, modifier = Modifier.fillMaxSize())
                 } else SpbPhotoCard(photos, panel.type, renderState, presentation, enabled, onRequestPhotos)
+                PanelType.MESSAGES -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.NOTIFICATIONS, modifier = Modifier.fillMaxSize())
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
+                PanelType.INDICATORS -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
+                    ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.SYSTEM, modifier = Modifier.fillMaxSize())
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
                 PanelType.ANDROID_WIDGET -> SpbAndroidWidget(panel.id, enabled)
                 else -> SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
             }
@@ -134,4 +140,5 @@ private fun AppsGrid(apps: List<AppItem>, interactive: Boolean, onLaunch: (AppIt
         }
     }
 }
+
 
