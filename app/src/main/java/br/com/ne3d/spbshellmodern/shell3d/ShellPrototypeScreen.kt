@@ -67,11 +67,11 @@ import br.com.ne3d.spbshellmodern.shell3d.widgets.weather.WeatherWidgetIds
     weatherInfo: WeatherInfo? = null,
     onExit: (String) -> Unit = {},
     modifier: Modifier = Modifier,
-) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, widgetSceneType, weatherInfo) {
+) = key(panels.map { it.id }, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, widgetSceneType) {
     val lifecycleOwner = LocalLifecycleOwner.current
     AndroidView(
         factory = { ShellPrototypeContainer(it, panels, selectedPanelId, includeRealPanels, exitOnTap, gesturesEnabled, debugWidgetScene, worldTimeWidgetScene, widgetSceneType, weatherInfo, onExit) },
-        update = { it.onExit = onExit; it.bindLifecycle(lifecycleOwner) },
+        update = { it.onExit = onExit; it.updateWeather(weatherInfo); it.bindLifecycle(lifecycleOwner) },
         modifier = modifier,
     )
 }
@@ -111,6 +111,7 @@ private class ShellPrototypeContainer(
         widgetDataSource,
         debugDataSource,
         worldTimeDataSource,
+        weatherDataSource,
         { snapshot -> updateWorldTimeInfo(snapshot) },
         workspacePanels.indexOfFirst { it.id == selectedPanelId }.coerceAtLeast(0)) {
             index -> onExit(workspacePanels.getOrNull(index)?.id ?: workspacePanels.first().id)
@@ -155,6 +156,7 @@ private class ShellPrototypeContainer(
         lifecycleOwner = owner
         owner.lifecycle.addObserver(lifecycleObserver)
     }
+    fun updateWeather(weather: WeatherInfo?) { surface.updateWeather(weather) }
     override fun onDetachedFromWindow() {
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         lifecycleOwner = null
@@ -187,6 +189,7 @@ private class ShellPrototypeView(
     private val widgetDataSource: WidgetDataSource<out WidgetSnapshot>?,
     private val debugDataSource: DebugWidgetDataSource?,
     private val worldTimeDataSource: WorldTimeDataSource?,
+    private val weatherDataSource: WeatherWidgetDataSource?,
     private val onWorldTimeSnapshot: (WorldTimeSnapshot?) -> Unit,
     initialSelectedIndex: Int,
     private val onExit: (Int) -> Unit,
@@ -268,6 +271,11 @@ private class ShellPrototypeView(
         scheduler.invalidateOnce()
     }
     fun onTextureAvailable() { scheduler.activate(FrameReason.TEXTURE_UPLOAD); scheduler.invalidateOnce() }
+    fun updateWeather(weather: WeatherInfo?) {
+        val source = weatherDataSource ?: return
+        source.publishWeather(weather)
+        widgetController?.onSnapshotPublished()
+    }
     fun pauseRenderer() {
         removeCallbacks(worldClockRefresh)
         widgetController?.pause()
