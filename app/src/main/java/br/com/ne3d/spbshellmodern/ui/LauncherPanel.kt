@@ -66,7 +66,7 @@ fun LauncherPanel(
             }
             HorizontalDivider(color = Color.White.copy(alpha = .13f))
         }
-        Box(Modifier.fillMaxWidth().weight(1f).padding(if (workspacePanel) 5.dp else if (compact) 7.dp else 10.dp)) {
+        Box(Modifier.fillMaxWidth().weight(1f).padding(if (workspacePanel) 5.dp else if (compact) 7.dp else 0.dp)) {
             if (itemContent != null) itemContent(panel)
             else when (panel.type) {
                 PanelType.APPS -> AppsGrid(apps, enabled, onLaunch)
