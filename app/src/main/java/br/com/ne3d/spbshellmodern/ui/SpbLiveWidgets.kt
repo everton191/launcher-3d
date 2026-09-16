@@ -170,12 +170,16 @@ internal fun SpbWorldTimeCard(id: String, presentation: WidgetPresentation, stat
     }
     var editing by remember { mutableIntStateOf(-1) }
     val compact = presentation in listOf(WidgetPresentation.ICON, WidgetPresentation.COMPACT, WidgetPresentation.ROW)
+    // FULL_PANEL owns the GL earth + 3 city rows and always shows dates.
+    // Carousel previews mirror that composition instead of collapsing on short cells.
+    val preview = isCarouselPreview(state, interactive)
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val showDates = !compact && maxHeight >= 280.dp
-    val globeSize = minOf(maxWidth * .77f, maxHeight * .43f,
+    val showDates = !compact && (preview || maxHeight >= 280.dp)
+    val globeSize = if (preview) minOf(maxWidth * .72f, maxHeight * .40f)
+        else minOf(maxWidth * .77f, maxHeight * .43f,
         (maxHeight - if (showDates) 184.dp else 132.dp).coerceAtLeast(0.dp))
-    val rowPadding = if (maxHeight < 340.dp) 3.dp else 10.dp
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+    val rowPadding = if (preview) 8.dp else if (maxHeight < 340.dp) 3.dp else 10.dp
+    Column(Modifier.fillMaxSize().then(if (preview) Modifier.padding(SpbCarouselPreview.previewPadding) else Modifier), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         if (!compact) {
             Box(Modifier.size(globeSize), contentAlignment = Alignment.Center) {
                 SpbOrb(false, longitude = now.hour / 24.0 * 2 * PI, state = state, modifier = Modifier.fillMaxSize(), description = "Globo terrestre")
@@ -338,15 +342,21 @@ internal fun SpbWeatherCard(weather: WeatherInfo?, city: String, onCity: (String
     var settings by remember { mutableStateOf(false) }
     var input by remember(city) { mutableStateOf(city) }
     val compactPresentation = presentation in listOf(WidgetPresentation.ICON, WidgetPresentation.COMPACT, WidgetPresentation.ROW)
+    // FULL_PANEL owns the GL sky + sun + graph and keeps the full composition.
+    // Carousel previews mirror it instead of collapsing to the compact row on short cells.
+    val preview = isCarouselPreview(state, interactive)
     BoxWithConstraints(Modifier.fillMaxSize()) {
     // An expanded item is shorter than a full panel. Keep actions reachable there,
     // and fit non-interactive previews without relying on an invisible scroll area.
-    val compact = compactPresentation || (!interactive && maxHeight < 300.dp)
-    val shortCard = maxHeight < 400.dp
-    val graphHeight = minOf(if (graph) 190.dp else 125.dp, maxHeight * if (shortCard) .22f else .30f).coerceAtLeast(40.dp)
-    val artworkSize = if (shortCard) 48.dp else if (graph) 80.dp else 124.dp
+    val compact = compactPresentation || (!preview && !interactive && maxHeight < 300.dp)
+    val shortCard = !preview && maxHeight < 400.dp
+    val graphHeight = (if (preview) minOf(if (graph) 170.dp else 120.dp, maxHeight * .26f)
+        else minOf(if (graph) 190.dp else 125.dp, maxHeight * if (shortCard) .22f else .30f)).coerceAtLeast(if (preview) 84.dp else 40.dp)
+    val artworkSize = if (preview) minOf(maxWidth * .30f, if (graph) 96.dp else 110.dp)
+        else if (shortCard) 48.dp else if (graph) 80.dp else 124.dp
     val scroll = rememberScrollState()
-    val contentModifier = if (interactive && !compact && maxHeight < 480.dp)
+    val contentModifier = if (preview) Modifier.fillMaxSize().padding(SpbCarouselPreview.previewPadding)
+        else if (interactive && !compact && maxHeight < 480.dp)
         Modifier.fillMaxWidth().verticalScroll(scroll) else Modifier.fillMaxSize()
     Column(contentModifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         if (weather == null) {

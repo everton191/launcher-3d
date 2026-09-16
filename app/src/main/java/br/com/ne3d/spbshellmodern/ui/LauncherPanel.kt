@@ -102,7 +102,7 @@ fun LauncherPanel(
                 PanelType.WEATHER_CURRENT, PanelType.WEATHER_GRAPH -> SpbWeatherCard(weather, weatherCity, onWeatherCityChange, onRefreshWeather, panel.type == PanelType.WEATHER_GRAPH, renderState, presentation, enabled)
                 PanelType.MEDIA -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.MUSIC, modifier = Modifier.fillMaxSize())
-                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id, preview = carouselPreview)
                 PanelType.CALENDAR -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.CALENDAR, modifier = Modifier.fillMaxSize())
                 } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
@@ -117,7 +117,7 @@ fun LauncherPanel(
                 } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
                 PanelType.INDICATORS -> if (enabled && !carouselPreview && presentation == WidgetPresentation.FULL_PANEL && renderState == WidgetRenderState.NORMAL_2D) {
                     ShellPrototypeScreen(panels = emptyList(), includeRealPanels = false, exitOnTap = false, widgetSceneType = WidgetSceneType.SYSTEM, modifier = Modifier.fillMaxSize())
-                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
+                } else SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id, preview = carouselPreview)
                 PanelType.ANDROID_WIDGET -> SpbAndroidWidget(panel.id, enabled)
                 else -> SpbUtilityWidget(panel.type, apps, enabled, onLaunch, panelId = panel.id)
             }

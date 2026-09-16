@@ -87,8 +87,28 @@ fun SpbUtilityWidget(
     apps: List<AppItem>,
     interactive: Boolean,
     onLaunch: (AppItem) -> Unit,
-    panelId: String = type.name
+    panelId: String = type.name,
+    preview: Boolean = false
 ) {
+    // FULL_PANEL owns the real GL scene (MUSIC / SYSTEM). Carousel previews mirror its
+    // centered, area-filling composition: no scroll, uniform padding, same components.
+    val carouselPreview = preview || !interactive
+    if (carouselPreview && (type == PanelType.MEDIA || type == PanelType.INDICATORS)) {
+        Column(
+            Modifier.fillMaxSize().padding(SpbCarouselPreview.previewPadding),
+            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+            horizontalAlignment = SpbCarouselPreview.contentAlignment
+        ) {
+            when (type) {
+                PanelType.MEDIA -> UtilityExternalAction("Música", "Escolha o que ouvir no seu reprodutor.",
+                    "Abrir reprodutor", false, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC),
+                    Intent(Intent.ACTION_VIEW).setDataAndType(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, "audio/*"))
+                PanelType.INDICATORS -> { UtilityBattery(); UtilityConnections(false) }
+                else -> Unit
+            }
+        }
+        return
+    }
     val backdrop = if (type == PanelType.NOTES) {
         val cork = ImageBitmap.imageResource(R.drawable.spb_note_cork)
         Modifier.background(remember(cork) { ShaderBrush(ImageShader(cork, TileMode.Repeated, TileMode.Repeated)) })
