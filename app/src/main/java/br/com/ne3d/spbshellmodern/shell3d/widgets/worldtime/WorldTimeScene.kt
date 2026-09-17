@@ -1,6 +1,7 @@
 package br.com.ne3d.spbshellmodern.shell3d.widgets.worldtime
 
 import br.com.ne3d.spbshellmodern.shell3d.scene.MeshFactory
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetFramingProvider
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetProjection
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneContext
@@ -34,6 +35,10 @@ class WorldTimeScene(private val cities: List<WorldTimeCity> = WorldTimeCities.d
     override fun prepare(context: WidgetSceneContext) {
         if (prepared) return
         prepared = true; touchRadiusPx = 36f * context.density
+        val framing = WidgetFramingProvider.framingFor(id)
+        graph.root.local.scaleX = framing.sceneScale
+        graph.root.local.scaleY = framing.sceneScale
+        graph.root.local.scaleZ = framing.sceneScale
         earth = graph.root.add(SceneNode("earth").apply {
             mesh = MeshFactory.uvSphere(28, 18, 1f)
             // Mirror the complete geographic scene, including city children, to match the requested reading direction.

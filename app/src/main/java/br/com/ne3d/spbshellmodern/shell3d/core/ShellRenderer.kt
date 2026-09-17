@@ -18,6 +18,7 @@ import javax.microedition.khronos.opengles.GL10
 import kotlin.math.*
 import java.util.concurrent.atomic.AtomicReference
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneController
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetFramingProvider
 
 class ShellRenderer(
     val engine: ShellEngine,
@@ -91,8 +92,12 @@ class ShellRenderer(
         val matrixStart = Debug.threadCpuTimeNanos()
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val exiting = engine.exit.active
-        if (widgetController?.scene?.id == "world-time") {
+        val widgetSceneId = widgetController?.scene?.id
+        val widgetFraming = widgetSceneId?.takeIf { WidgetFramingProvider.hasOverride(it) }?.let { WidgetFramingProvider.framingFor(it) }
+        if (widgetFraming != null) {
             // Widget scenes own their framing; carousel camera motion stays untouched.
+            camera.matrix(width, height, vp, widgetFraming.fov, widgetFraming.cameraZ, widgetFraming.cameraY, widgetFraming.lookAtY)
+        } else if (widgetSceneId == "world-time") {
             camera.matrix(width, height, vp, 42f, 7.5f, 0f, 0f)
         } else {
             camera.matrix(width, height, vp, if (exiting) engine.exit.fov else engine.entry.fov, if (exiting) engine.exit.cameraZ else engine.entry.cameraZ, if (exiting) engine.exit.cameraY else engine.cameraY)

@@ -1,6 +1,7 @@
 package br.com.ne3d.spbshellmodern.shell3d.widgets.weather
 
 import br.com.ne3d.spbshellmodern.shell3d.scene.MeshFactory
+import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetFramingProvider
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetScene
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneContext
 import br.com.ne3d.spbshellmodern.shell3d.widgets.data.WidgetSnapshot
@@ -27,6 +28,10 @@ class WeatherScene : WidgetScene {
 
     override fun prepare(context: WidgetSceneContext) {
         if (prepared) return; prepared = true
+        val framing = WidgetFramingProvider.framingFor(id)
+        graph.root.local.scaleX = framing.sceneScale
+        graph.root.local.scaleY = framing.sceneScale
+        graph.root.local.scaleZ = framing.sceneScale
         graph.root.add(SceneNode("sky").apply { mesh=MeshFactory.plane(1f); material=WidgetMaterial(color=0xFF102B57.toInt()); local.z=-1.2f; local.scaleX=2.2f; local.scaleY=1.3f })
         sun=graph.root.add(SceneNode("sun").apply { mesh=MeshFactory.uvSphere(16, 10, .28f); material=WidgetMaterial(color=0xFFFFC64B.toInt(), emissive=.5f); local.x=.6f; local.y=.46f })
         halo=graph.root.add(SceneNode("sun-halo").apply { mesh=MeshFactory.plane(1f); material=WidgetMaterial(color=0x55FFD66B, alpha=.28f); local.x=.6f; local.y=.46f; local.z=-.05f; local.scaleX=.42f; local.scaleY=.42f })
