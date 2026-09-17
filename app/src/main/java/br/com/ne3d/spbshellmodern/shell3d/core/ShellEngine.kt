@@ -6,6 +6,7 @@ import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselEntryTransition
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselExitTransition
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
 import br.com.ne3d.spbshellmodern.shell3d.animation.PanelPresentationState
+import br.com.ne3d.spbshellmodern.shell3d.presentation.PresentationItem
 import br.com.ne3d.spbshellmodern.engine.nearestPanel
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectDebug
@@ -35,6 +36,9 @@ class ShellEngine(
     fun physicalIndex(): Int = CarouselCircularIndex.physicalIndex(logicalIndex, state.panels.size)
     val presentationEmphasis: Float get() = idle.presentationEmphasis
     val presentationState: PanelPresentationState get() = idle.presentation.state
+    /** Live overlay items of the presented front panel. Empty unless presenting. */
+    val livePresentationItems: List<PresentationItem>
+        get() = idle.liveItems
     val autoplayPhase get() = idle.autoplayPhase
     fun setAutoplayEnabled(enabled: Boolean) = idle.setAutoplayEnabled(enabled)
     var cameraY = spec.cameraY

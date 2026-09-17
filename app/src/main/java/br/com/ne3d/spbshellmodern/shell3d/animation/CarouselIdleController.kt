@@ -3,6 +3,11 @@ package br.com.ne3d.spbshellmodern.shell3d.animation
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselCircularIndex
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselMotionSpec
 import br.com.ne3d.spbshellmodern.shell3d.carousel.CarouselPhysics
+import br.com.ne3d.spbshellmodern.shell3d.presentation.CarouselPresentationRegistry
+import br.com.ne3d.spbshellmodern.shell3d.presentation.PanelPresentation
+import br.com.ne3d.spbshellmodern.shell3d.presentation.PresentationFrame
+import br.com.ne3d.spbshellmodern.shell3d.presentation.PresentationItem
+import br.com.ne3d.spbshellmodern.shell3d.presentation.registerLauncherPresentations
 
 /** Autoplay/presentation phases. INTRO/ACTIVE/OUTRO detail lives in [PanelPresentationController]. */
 enum class AutoplayPhase { INACTIVE, IDLE_WAIT, ROTATING_TO_NEXT, SETTLING, PRESENTING, BETWEEN_PANELS }
@@ -32,6 +37,14 @@ class CarouselIdleController(
         spec.presentationIntroMs, spec.presentationActiveMs, spec.presentationOutroMs, nowNanos
     )
     val presentationEmphasis: Float get() = presentation.emphasis
+    /** Live overlay items for the presented panel. Rebuilt on drawn frames only. */
+    val liveItems = ArrayList<PresentationItem>()
+    val presentations = CarouselPresentationRegistry()
+    private var live: PanelPresentation? = null
+    private var liveTimeSeconds = 0f
+    init {
+        registerLauncherPresentations(presentations)
+    }
     val isAdvancing: Boolean get() =
         autoplayPhase == AutoplayPhase.ROTATING_TO_NEXT || autoplayPhase == AutoplayPhase.SETTLING
     private var waitStartNanos: Long = nowNanos()
@@ -57,6 +70,7 @@ class CarouselIdleController(
     fun setAutoplayEnabled(enabled: Boolean) {
         autoplayOn = enabled
         if (!enabled) {
+            stopLive()
             presentation.cancel()
             autoplayPhase = AutoplayPhase.INACTIVE
         } else if (autoplayPhase == AutoplayPhase.INACTIVE) {
@@ -71,6 +85,7 @@ class CarouselIdleController(
 
     /** Opening a panel cancels motion/presentation immediately. */
     fun cancelForOpen() {
+        stopLive()
         presentation.cancel()
         state = State.INTERACTING
         autoplayPhase = AutoplayPhase.IDLE_WAIT
@@ -90,6 +105,7 @@ class CarouselIdleController(
     ): Boolean {
         if (!autoplayOn || panelCount <= 0) {
             if (autoplayPhase != AutoplayPhase.INACTIVE) {
+                stopLive()
                 presentation.cancel()
                 autoplayPhase = AutoplayPhase.INACTIVE
             }
@@ -124,13 +140,34 @@ class CarouselIdleController(
                     autoplayPhase = AutoplayPhase.ROTATING_TO_NEXT
                     return true
                 }
+                stopLive()
                 presentation.begin(targetLogical, targetPhysical, panelIdAt(targetPhysical).orEmpty())
+                liveTimeSeconds = 0f
+                val layer = presentations.presentationFor(presentation.state.panelId)
+                layer.start(presentation.state)
+                live = layer
                 autoplayPhase = AutoplayPhase.PRESENTING
                 return true
             }
             AutoplayPhase.PRESENTING -> {
-                if (presentation.tick(dtSeconds)) return true
+                val timelineNeeds = presentation.tick(dtSeconds)
+                liveTimeSeconds += dtSeconds
+                var liveNeeds = false
+                val layer = live
+                if (layer != null) {
+                    val frame = PresentationFrame(
+                        progress = presentation.state.progress,
+                        phaseProgress = presentation.state.phaseProgress,
+                        dtSeconds = dtSeconds,
+                        timeSeconds = liveTimeSeconds,
+                    )
+                    liveNeeds = layer.update(frame, presentation.state)
+                    liveItems.clear()
+                    if (presentation.isRunning) layer.collectItems(liveItems)
+                }
+                if (timelineNeeds || liveNeeds) return true
                 if (!presentation.isRunning) {
+                    stopLive()
                     waitStartNanos = now
                     autoplayPhase = AutoplayPhase.BETWEEN_PANELS
                 }
@@ -150,8 +187,16 @@ class CarouselIdleController(
     }
 
     private fun abortToWait() {
+        stopLive()
         presentation.cancel()
         autoplayPhase = if (autoplayOn) AutoplayPhase.IDLE_WAIT else AutoplayPhase.INACTIVE
         waitStartNanos = nowNanos()
+    }
+
+    private fun stopLive() {
+        live?.stop()
+        live = null
+        liveItems.clear()
+        liveTimeSeconds = 0f
     }
 }

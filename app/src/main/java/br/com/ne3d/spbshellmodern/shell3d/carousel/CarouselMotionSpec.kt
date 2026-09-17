@@ -23,8 +23,8 @@ data class CarouselMotionSpec(
     val overshoot: Float = .04f, val settleThreshold: Float = .05f,
     // Circular presentation autoplay: one panel per cycle (~9-10s), then next.
     val autoplayIdleDelayMs: Long = 5_000, val autoplaySnapDurationMs: Long = 750,
-    val presentationIntroMs: Long = 800, val presentationActiveMs: Long = 7_000,
-    val presentationOutroMs: Long = 800, val betweenPanelsDelayMs: Long = 400,
+    val presentationIntroMs: Long = 1_350, val presentationActiveMs: Long = 6_000,
+    val presentationOutroMs: Long = 1_350, val betweenPanelsDelayMs: Long = 400,
     // Diagnostic proof-of-motion applied to the front panel only.
     val presentationZPush: Float = .45f, val presentationScaleBoost: Float = .10f
 )

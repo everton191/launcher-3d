@@ -17,8 +17,10 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.*
 import java.util.concurrent.atomic.AtomicReference
+import android.content.res.Resources
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetSceneController
 import br.com.ne3d.spbshellmodern.shell3d.widgets.WidgetFramingProvider
+import br.com.ne3d.spbshellmodern.shell3d.widgets.render.WidgetTextureRef
 
 class ShellRenderer(
     val engine: ShellEngine,
@@ -35,6 +37,7 @@ class ShellRenderer(
 ) : GLSurfaceView.Renderer {
     data class PendingTexture(val key: String, val bitmap: AtomicReference<Bitmap?>)
     private val camera = ShellCamera(engine.spec); private val textures = TextureManager(); private val vp = FloatArray(16); private val model = FloatArray(16); private val mvp = FloatArray(16)
+    private val presentationWorld = FloatArray(16)
     private val layout = CarouselLayout(engine.spec); private val metrics = FrameMetrics()
     private var program = 0; private var width = 1; private var height = 1; private var lastNanos = 0L
     private var positionLocation = -1; private var uvLocation = -1; private var matrixLocation = -1; private var textureLocation = -1; private var alphaLocation = -1; private var mirrorPassLocation = -1; private var colorLocation = -1; private var useTextureLocation = -1; private var widgetPrepared = false; private var widgetAnimating = false
@@ -151,6 +154,38 @@ class ShellRenderer(
             Matrix.setIdentityM(model,0); Matrix.translateM(model,0,transform.x,transform.y,transform.z); Matrix.rotateM(model,0,transform.rotationY,0f,1f,0f); Matrix.scaleM(model,0,panel.effectiveScale,panel.effectiveScale,panel.effectiveScale); Matrix.multiplyMM(mvp,0,vp,0,model,0)
             panelMatrixNanos += Debug.threadCpuTimeNanos() - panelMatrixStart
             GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,0); GLES30.glUniform1f(alpha,panel.effectiveAlpha); GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,textures.textureId(panel.id)); GLES30.glUniform1i(texture,0); panel.renderMesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,panel.renderMesh.indexCount,GLES30.GL_UNSIGNED_SHORT,panel.renderMesh.indices); drawn++
+            // Live presentation overlay: front panel only, panelModelMatrix x itemLocalMatrix.
+            // The card texture stays: items draw additively on top of it, never as a replacement.
+            val liveItems = engine.livePresentationItems
+            if (liveItems.isNotEmpty() && widgetController == null && !exiting && index == engine.selectedIndex) {
+                var li = 0
+                while (li < liveItems.size) {
+                    val item = liveItems[li++]
+                    if (!item.visible || item.alpha <= 0f) continue
+                    Matrix.multiplyMM(presentationWorld,0,model,0,item.localMatrix,0); Matrix.multiplyMM(mvp,0,vp,0,presentationWorld,0)
+                    val mesh = item.mesh
+                    mesh.vertices.position(MeshVertexLayout.POSITION_FLOAT_OFFSET); GLES30.glVertexAttribPointer(position,MeshVertexLayout.POSITION_COMPONENTS,GLES30.GL_FLOAT,false,mesh.strideBytes,mesh.vertices); GLES30.glEnableVertexAttribArray(position)
+                    mesh.vertices.position(MeshVertexLayout.UV_FLOAT_OFFSET); GLES30.glVertexAttribPointer(uv,MeshVertexLayout.UV_COMPONENTS,GLES30.GL_FLOAT,false,mesh.strideBytes,mesh.vertices); GLES30.glEnableVertexAttribArray(uv)
+                    var widgetTexture = 0
+                    val textureRef = item.textureRef
+                    if (textureRef != null) {
+                        var textureId = textures.textureId(textureRef.key)
+                        if (textureId == 0) {
+                            val bitmap = textureRef.bitmapFactory(widgetResources ?: Resources.getSystem())
+                            textures.update(textureRef.key, bitmap); bitmap.recycle()
+                            textureId = textures.textureId(textureRef.key)
+                        }
+                        widgetTexture = textureId
+                    }
+                    val color = item.color
+                    GLES30.glUniformMatrix4fv(matrix,1,false,mvp,0); GLES30.glUniform1i(mirrorPassLocation,0); GLES30.glUniform1i(useTextureLocation,if(widgetTexture!=0)1 else 0)
+                    GLES30.glUniform4f(colorLocation,((color shr 16) and 255)/255f,((color shr 8) and 255)/255f,(color and 255)/255f,((color ushr 24) and 255)/255f)
+                    GLES30.glUniform1f(alpha,item.alpha)
+                    if (widgetTexture != 0) { GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,widgetTexture); GLES30.glUniform1i(texture,0) }
+                    mesh.indices.position(0); GLES30.glDrawElements(GLES30.GL_TRIANGLES,mesh.indexCount,GLES30.GL_UNSIGNED_SHORT,mesh.indices); drawn++
+                }
+                GLES30.glUniform1i(useTextureLocation,1)
+            }
         }; GLES30.glDisableVertexAttribArray(position); GLES30.glDisableVertexAttribArray(uv)
         // Mirror floor pass: every visible panel reuses the transform and mesh from the real pass.
         engine.state.panels.forEach { panel ->
