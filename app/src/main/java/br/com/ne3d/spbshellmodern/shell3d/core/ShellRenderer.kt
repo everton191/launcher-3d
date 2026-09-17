@@ -133,6 +133,13 @@ class ShellRenderer(
             if (panel.deformerStack.isEmpty()) panel.resetRenderMesh() else panel.deformerStack.apply(panel, effectInput)
             layoutNanos += Debug.threadCpuTimeNanos() - layoutStart
             val transform = panel.renderTransform
+            // Presentation proof-of-motion: front panel only, eases back to the exact base pose.
+            val emphasis = engine.presentationEmphasis
+            if (emphasis > 0f && widgetController == null && !exiting && index == engine.selectedIndex) {
+                transform.z += emphasis * engine.spec.presentationZPush
+                val boost = 1f + emphasis * engine.spec.presentationScaleBoost
+                transform.scaleX *= boost; transform.scaleY *= boost; transform.scaleZ *= boost
+            }
             if (!transform.visible || textures.textureId(panel.id) == 0) return@forEachIndexed
             panel.renderMesh.vertices.position(MeshVertexLayout.POSITION_FLOAT_OFFSET); GLES30.glVertexAttribPointer(position,MeshVertexLayout.POSITION_COMPONENTS,GLES30.GL_FLOAT,false,panel.renderMesh.strideBytes,panel.renderMesh.vertices); GLES30.glEnableVertexAttribArray(position)
             panel.renderMesh.vertices.position(MeshVertexLayout.UV_FLOAT_OFFSET); GLES30.glVertexAttribPointer(uv,MeshVertexLayout.UV_COMPONENTS,GLES30.GL_FLOAT,false,panel.renderMesh.strideBytes,panel.renderMesh.vertices); GLES30.glEnableVertexAttribArray(uv)

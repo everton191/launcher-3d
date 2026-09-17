@@ -5,6 +5,8 @@ import br.com.ne3d.spbshellmodern.shell3d.scene.Panel3D
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselEntryTransition
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselExitTransition
 import br.com.ne3d.spbshellmodern.shell3d.animation.CarouselIdleController
+import br.com.ne3d.spbshellmodern.shell3d.animation.PanelPresentationState
+import br.com.ne3d.spbshellmodern.engine.nearestPanel
 import br.com.ne3d.spbshellmodern.shell3d.effects.EffectContext
 import br.com.ne3d.spbshellmodern.shell3d.effects.PanelEffectDebug
 import br.com.ne3d.spbshellmodern.shell3d.effects.configureEffect
@@ -24,12 +26,19 @@ class ShellEngine(
     val state = SceneState(); val carousel = CarouselPhysics(spec)
     val entry = CarouselEntryTransition(spec)
     val exit = CarouselExitTransition(spec)
-    val idle = CarouselIdleController()
+    val idle = CarouselIdleController(spec)
     var selectedIndex = 0
         private set
+    /** Unbounded logical position; the visible slot is its circular projection. */
+    var logicalIndex: Long = 0L
+        private set
+    fun physicalIndex(): Int = CarouselCircularIndex.physicalIndex(logicalIndex, state.panels.size)
+    val presentationEmphasis: Float get() = idle.presentationEmphasis
+    val presentationState: PanelPresentationState get() = idle.presentation.state
+    val autoplayPhase get() = idle.autoplayPhase
+    fun setAutoplayEnabled(enabled: Boolean) = idle.setAutoplayEnabled(enabled)
     var cameraY = spec.cameraY
         private set
-    private var autoRotationRequested = false
     private var autoWakePending = false
     private val commands = ConcurrentLinkedQueue<Command>()
     private val effectContext: EffectContext
@@ -47,7 +56,12 @@ class ShellEngine(
             Panel3D("moon", "Lua", 0xFF48546B.toInt(), snapshotKind),
             Panel3D("gallery", "Galeria", 0xFF705747.toInt(), snapshotKind),
         )
-        if (state.panels.isNotEmpty()) carousel.setAngle(-initialSelectedIndex.coerceIn(state.panels.indices) * 360f / state.panels.size)
+        if (state.panels.isNotEmpty()) {
+            selectedIndex = initialSelectedIndex.coerceIn(state.panels.indices)
+            logicalIndex = selectedIndex.toLong()
+            idle.syncLogical(logicalIndex)
+            carousel.setAngle(-selectedIndex * 360f / state.panels.size)
+        }
         effectContext = EffectContext(panelCount = state.panels.size, motionSpec = spec)
         var index = 0
         while (index < state.panels.size) {
@@ -86,6 +100,9 @@ class ShellEngine(
     private fun applyExitForPanel(index: Int) {
         if (entry.active || exit.active || state.panels.isEmpty()) return
         selectedIndex = index.coerceIn(state.panels.indices)
+        logicalIndex = selectedIndex.toLong()
+        idle.syncLogical(logicalIndex)
+        idle.cancelForOpen()
         state.panels[selectedIndex].configureEffect(PanelEffectDebug.mode)
         Log.i("Shell3D.Exit", "target=${state.panels[selectedIndex].id} index=$selectedIndex effect=${PanelEffectDebug.mode}")
         exit.begin()
@@ -98,9 +115,18 @@ class ShellEngine(
         if (carousel.dragging) return true
         val settling = carousel.tick(dt, state.panels.size)
         if (settling) return true
-        if (autoRotationRequested) {
-            carousel.autoRotate(dt * AUTO_ROTATE_DEGREES_PER_SECOND)
-            return true
+        // Circular presentation autoplay: snap exactly one panel, stop, present, return, pause.
+        if (idle.tickAutoplay(dt, carousel, state.panels.size,
+                { state.panels.getOrNull(it)?.id },
+                { logical, physical -> selectedIndex = physical; logicalIndex = logical })) return true
+        // A manually settled ring re-syncs the visible selection; never during an autoplay advance.
+        if (!entry.active && !exit.active && !idle.isAdvancing && state.panels.isNotEmpty()) {
+            val front = nearestPanel(carousel.angle, state.panels.size)
+            if (front != selectedIndex) {
+                selectedIndex = front
+                logicalIndex = front.toLong()
+                idle.syncLogical(logicalIndex)
+            }
         }
         idle.onIdle()
         autoWakePending = true
@@ -115,15 +141,16 @@ class ShellEngine(
         while (true) {
             val command = commands.poll() ?: break
             when (command) {
-            Command.GestureStart -> { autoRotationRequested = false; autoWakePending = false; carousel.beginDrag(); idle.onInteraction() }
+            Command.GestureStart -> { autoWakePending = false; carousel.beginDrag(); idle.onInteraction() }
             else -> consumePendingMoves()
             }
             when (command) {
             Command.GestureStart -> Unit
             Command.GestureEnd -> { carousel.endDrag(); idle.onSettling() }
-            is Command.Fling -> { autoRotationRequested = false; autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
+            is Command.Fling -> { autoWakePending = false; idle.onSettling(); carousel.fling(command.velocityX) }
             is Command.ExitPanel -> applyExitForPanel(command.index)
-            Command.AutoRotate -> { if (!carousel.dragging && !exit.active) autoRotationRequested = true }
+            // Scheduler idle wake: the autoplay machine re-evaluates its deadlines in tick().
+            Command.AutoRotate -> { idle.onAutoplayWakeup() }
             }
         }
         consumePendingMoves()
@@ -132,8 +159,8 @@ class ShellEngine(
     private fun consumePendingMoves() {
         val dx = Float.fromBits(pendingDxBits.getAndSet(0))
         val dy = Float.fromBits(pendingDyBits.getAndSet(0))
-        if (dx != 0f) { autoRotationRequested = false; autoWakePending = false; idle.onInteraction(); carousel.dragBy(dx) }
-        if (dy != 0f) { autoRotationRequested = false; autoWakePending = false; idle.onInteraction(); applyVerticalDrag(dy) }
+        if (dx != 0f) { autoWakePending = false; idle.onInteraction(); carousel.dragBy(dx) }
+        if (dy != 0f) { autoWakePending = false; idle.onInteraction(); applyVerticalDrag(dy) }
     }
     private fun accumulate(target: AtomicInteger, delta: Float) {
         while (true) {
@@ -150,5 +177,5 @@ class ShellEngine(
         data class Fling(val velocityX: Float) : Command
         data class ExitPanel(val index: Int) : Command
     }
-    companion object { const val AUTO_ROTATE_DELAY_MILLIS = 5_000L; private const val AUTO_ROTATE_DEGREES_PER_SECOND = 18f }
+    companion object { const val AUTO_ROTATE_DELAY_MILLIS = 5_000L }
 }

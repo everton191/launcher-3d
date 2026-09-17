@@ -82,15 +82,26 @@ class CarouselPhysics(private val spec: CarouselMotionSpec) {
         }
     }
     fun setAngle(value: Float) { snap.cancel(); angle = normalized(value); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.IDLE }
+    /** A snap is in flight until the ring rests with zero velocity. */
+    val isSettled: Boolean get() = state == CarouselMotionState.IDLE && velocity == 0f
     /** Uses the same snap track and easing as a drag release; never teleports the ring. */
     fun snapToIndex(index: Int, panelCount: Int) {
         if (panelCount <= 0) return
         val step = 360f / panelCount
+        val distance = abs(snapTargetFor(index, panelCount) - angle)
+        snapToIndex(index, panelCount, (spec.snapMinDurationMs + ((spec.snapMaxDurationMs - spec.snapMinDurationMs) * (distance / step).coerceIn(0f, 1f))).toLong())
+    }
+    /** Same snap with an explicit duration, used by the presentation autoplay. */
+    fun snapToIndex(index: Int, panelCount: Int, durationMs: Long) {
+        if (panelCount <= 0) return
+        snap.begin(angle, snapTargetFor(index, panelCount), durationMs.coerceAtLeast(1L))
+        velocity = 0f; flingDirection = 0f; state = CarouselMotionState.SNAP
+    }
+
+    private fun snapTargetFor(index: Int, panelCount: Int): Float {
+        val step = 360f / panelCount
         val base = -index.mod(panelCount) * step
-        val target = base + round((angle - base) / 360f) * 360f
-        val distance = abs(target - angle)
-        val duration = (spec.snapMinDurationMs + ((spec.snapMaxDurationMs - spec.snapMinDurationMs) * (distance / step).coerceIn(0f, 1f))).toLong()
-        snap.begin(angle, target, duration); velocity = 0f; flingDirection = 0f; state = CarouselMotionState.SNAP
+        return base + round((angle - base) / 360f) * 360f
     }
 
     private fun beginSnap(panelCount: Int) {
